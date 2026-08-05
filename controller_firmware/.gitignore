@@ -1,0 +1,18 @@
+# PlatformIO build output
+.pio/
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets (never commit credentials)
+secrets.h
+credentials.h
