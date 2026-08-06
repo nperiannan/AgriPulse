@@ -54,7 +54,7 @@ Pin columns differ per board revision — use the column matching your build env
 | Relay 1 | GPIO1 — motor | same |
 | Relay 2 | GPIO2 — motor | same |
 | Relay 3 | GPIO35 — changeover contactor *(not yet driven by firmware)* | same |
-| Energy meter | ADE7758 (3-phase) on SPI3, isolated via ISO6741; IRQ→GPIO46 via optocoupler *(not yet driven by firmware)* | same |
+| Energy meter | ADE7758 (3-phase) on FSPI: SCLK=4, MISO=5, MOSI=6, CS=48; IRQ→GPIO46 via optocoupler; isolated by ISO6741 | same |
 | Buzzer | GPIO3 | same |
 | Float switch | GPIO42 (UG tank) | GPIO47 |
 | Touch buttons | OH=GPIO41, UG=GPIO40 | OH=GPIO17, UG=GPIO18 |

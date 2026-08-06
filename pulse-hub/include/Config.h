@@ -94,12 +94,13 @@
 // in-flight radio transaction — a failure the previous-generation controller
 // hit when both shared one bus.
 //
-// !! VERIFY AGAINST THE BOARD !!  These are traced from the v1 schematic net
-// labels, not yet confirmed on hardware.  ADE_CS_PIN is the least certain.
+// Pins verified against harwaredetails/esp32_4g_gateway (EasyEDA netlist):
+//   IO4 SPI3_SCK · IO5 SPI3_MISO · IO6 SPI3_MOSI · IO48 ADE_SPI_CS
+//   IO46 carries ADE_IRQ across the CT4N25 optocoupler.
 #define ADE_SCLK_PIN   4
 #define ADE_MISO_PIN   5
 #define ADE_MOSI_PIN   6
-#define ADE_CS_PIN     7
+#define ADE_CS_PIN    48
 #define ADE_IRQ_PIN   46
 
 #define ADE_SPI_HZ            2000000UL  // datasheet max 2.5 MHz
