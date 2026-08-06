@@ -34,9 +34,9 @@ WebServer& apiServer = server;
 // standing at the panel is itself proof of authorisation, and requiring a
 // password to stop a motor by hand would be actively dangerous.
 //
-// There is no TLS on this server, so the browser is challenged with Digest
-// (password never crosses the wire) while a Basic header is still accepted for
-// simple API clients.
+// There is no TLS on this server, so the credentials cross the local link in
+// clear either way. Basic is used because this WebServer's Digest support
+// rejects every second request (see requireAuth).
 //
 // Ships with admin/password for bench work. That is a known-weak default and
 // must be changed before the unit is deployed; it is logged loudly on every
@@ -75,7 +75,11 @@ static void loadWebCredentials() {
 
 static bool requireAuth() {
     if (server.authenticate(webUser.c_str(), webPass.c_str())) return true;
-    server.requestAuthentication(DIGEST_AUTH, "AgriPulse", "Authentication required");
+    // Basic, not Digest: this WebServer rotates its digest nonce on every
+    // challenge, so a browser reusing the nonce it was just issued gets
+    // rejected — every second request 401s and the page loads unstyled.
+    // There is no TLS here regardless, so Digest bought little.
+    server.requestAuthentication(BASIC_AUTH, "AgriPulse", "Authentication required");
     return false;
 }
 

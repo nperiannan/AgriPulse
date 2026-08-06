@@ -425,22 +425,37 @@ static void wifiTask(void* /*param*/) {
                         // not done yet, check again next tick
                     } else {
                         smScanPending = false;
+                        bool anySeen = false;
                         if (found <= 0) {
                             Log(WARN, "[WiFi] Scan found no networks");
                         } else {
                             for (int s = 0; s < found; s++) {
+                                for (int n = 0; n < networkCount; n++) {
+                                    if (WiFi.SSID(s) == networks[n].ssid) anySeen = true;
+                                }
                                 Log(INFO, "[WiFi] Scan: " + WiFi.SSID(s)
                                           + " ch=" + String(WiFi.channel(s))
                                           + " RSSI=" + String(WiFi.RSSI(s)));
                             }
                         }
                         WiFi.scanDelete();
-                        // Proceed with first connection attempt
-                        smTryAttempts++;
-                        Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
-                                  + " -> " + networks[smTryIdx].ssid);
-                        WiFi.begin(networks[smTryIdx].ssid.c_str(), networks[smTryIdx].password.c_str());
-                        smNextActionMs = millis() + WIFI_ATTEMPT_TIMEOUT_MS;
+
+                        if (!anySeen) {
+                            // Associating with an absent SSID holds the shared radio for the
+                            // whole attempt window, which makes the AP's web UI unreachable.
+                            // Skip straight to cooldown rather than burning three of those.
+                            smInCooldown      = true;
+                            smCooldownUntilMs = millis() + WIFI_COOLDOWN_MS;
+                            smTryIdx          = 0;
+                            smTryAttempts     = 0;
+                            Log(WARN, "[WiFi] No configured SSID in range - cooling down, AP stays responsive");
+                        } else {
+                            smTryAttempts++;
+                            Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
+                                      + " -> " + networks[smTryIdx].ssid);
+                            WiFi.begin(networks[smTryIdx].ssid.c_str(), networks[smTryIdx].password.c_str());
+                            smNextActionMs = millis() + WIFI_ATTEMPT_TIMEOUT_MS;
+                        }
                     }
                 } else if (millis() >= smNextActionMs) {
                     // Previous attempt window expired — log why it failed then advance

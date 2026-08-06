@@ -172,8 +172,7 @@ static uint8_t findLcdAddress() {
         Wire.beginTransmission(a);
         if (Wire.endTransmission() == 0) return a;
     }
-    Log(WARN, "[Display] No LCD backpack detected – falling back to 0x" + String(LCD_ADDRESS, HEX));
-    return LCD_ADDRESS;
+    return 0;   // nothing on the bus
 }
 
 void initDisplay() {
@@ -181,6 +180,15 @@ void initDisplay() {
     // If it differs from the compile-time default, rebuild the LCD object
     // in-place (placement new) so every existing lcd.* call keeps working.
     lcdAddr = findLcdAddress();
+
+    // With no panel fitted, every write would stall on an I2C timeout — in the
+    // same loop that serves the web UI, which made the page unreachable.
+    if (lcdAddr == 0) {
+        lcdInitOk = false;
+        Log(WARN, "[Display] No LCD on the bus - display disabled");
+        return;
+    }
+
     if (lcdAddr != LCD_ADDRESS) {
         lcd.~LiquidCrystal_I2C();
         new (&lcd) LiquidCrystal_I2C(lcdAddr, LCD_COLUMNS, LCD_ROWS);

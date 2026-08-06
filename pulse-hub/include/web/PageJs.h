@@ -9,9 +9,18 @@
 
 static const char PAGE_JS[] PROGMEM = R"JS(
 var Api={
-  get:function(u){return fetch(u).then(function(r){
-    if(r.status===401){throw new Error('unauthorised');} return r.json();});},
-  post:function(u,o){return fetch(u,{method:'POST',body:new URLSearchParams(o)})
+  // Every request is time-boxed. The hub serves one connection at a time, so a
+  // request left hanging would otherwise stall the whole poll chain.
+  fetchT:function(u,opt,ms){
+    var c=new AbortController();
+    var t=setTimeout(function(){c.abort();},ms||6000);
+    opt=opt||{};opt.signal=c.signal;
+    return fetch(u,opt).then(function(r){clearTimeout(t);
+      if(r.status===401)throw new Error('unauthorised');return r;},
+      function(e){clearTimeout(t);throw e;});
+  },
+  get:function(u){return Api.fetchT(u).then(function(r){return r.json();});},
+  post:function(u,o){return Api.fetchT(u,{method:'POST',body:new URLSearchParams(o)},8000)
     .then(function(r){return r.json();});}
 };
 
@@ -42,7 +51,7 @@ try{var _t=localStorage.getItem('apt');if(_t)document.documentElement.setAttribu
 /* ---- Power ---- */
 var Power={
   poll:function(){
-    Api.get('/api/power').then(function(d){
+    return Api.get('/api/power').then(function(d){
       var h='';
       for(var i=0;i<d.phases.length;i++){var p=d.phases[i];
         h+='<tr><td>'+p.name+'</td><td'+(p.present?'':' class="dead"')+'>'+UI.fmt(p.volts,0)+
@@ -72,7 +81,7 @@ var Power={
 var Motor={
   pick:'well',
   poll:function(){
-    Api.get('/api/motor').then(function(d){
+    return Api.get('/api/motor').then(function(d){
       UI.el('mState').textContent=d.state;
       var b=UI.el('mBadge');
       b.textContent=d.running?'running':(d.enabled?'idle':'disabled');
@@ -233,8 +242,26 @@ bind('btnLogRefresh',Sys.logs);
 bind('btnLogClear',function(){UI.act('/clearlogs',{},'Cleared').then(Sys.logs);});
 
 function tick(){UI.el('clock').textContent=new Date().toTimeString().substr(0,8);}
-Zones.load();Power.poll();Motor.poll();tick();
-setInterval(Power.poll,2000);setInterval(Motor.poll,2000);setInterval(tick,1000);
+
+// One request at a time, chained, with a gap after each full cycle.
+// Independent setInterval timers pile requests up faster than a single-connection
+// server can drain them, which collapses into connection resets.
+var POLL_MS=3000, pollFails=0;
+function cycle(){
+  Power.poll()
+    .then(function(){return Motor.poll();})
+    .then(function(){pollFails=0;})
+    .catch(function(){pollFails++;})
+    .then(function(){
+      // Back off when the hub is struggling (it starves the AP while the Wi-Fi
+      // task is attempting a station connection).
+      var wait=POLL_MS*(pollFails>3?4:(pollFails>0?2:1));
+      setTimeout(cycle,wait);
+    });
+}
+
+Zones.load();tick();cycle();
+setInterval(tick,1000);
 )JS";
 
 #endif // PAGE_JS_H
