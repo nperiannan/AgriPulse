@@ -18,35 +18,67 @@ Irrigation, pump and tank-level controller built on the **Kinetic Dynamics Nebul
 - **History logging** — Ring-buffer event log stored in NVS, viewable in web UI
 - **Transmitter lost detection** — Alerts when no LoRa packet received from OH transmitter for 90+ seconds
 
+## Board Version — read this first
+
+Two PCB revisions exist and **their pinouts differ**. This project targets the
+**v1.x board**, which is the default build. The revision is selected at compile
+time by the `BOARD_V2` macro, supplied by the PlatformIO environment — never
+edit `Config.h` to switch boards.
+
+| Board | Environment | Notes |
+| --- | --- | --- |
+| **v1.x (current target)** | `nebulas3` / `nebulas3_serial` | ESP32-S3-WROOM-1 **N16R8**, carries the ADE7758 energy meter and 3 relays |
+| v2.0 | `nebulas3_v2` / `nebulas3_v2_serial` | Adds `-D BOARD_V2`; I2C, touch and float pins all move |
+
+> **Do not enable PSRAM.** The N16R8 module's octal PSRAM occupies GPIO35–37, and
+> **RLY3 (the changeover contactor) is on GPIO35**. `platformio.ini` sets
+> `board_build.psram = disabled` for this reason — re-enabling it silently kills
+> the changeover relay while a 3-phase motor is connected.
+
+> **Flash:** the module has 16 MB, but `partitions/ota_dual_app.csv` currently maps
+> only 4 MB (a leftover from the earlier 4 MB board). ~12 MB is unused.
+
 ## Hardware
 
-| Component | Details |
-| --- | --- |
-| MCU | ESP32-S3, 240 MHz dual-core, 320 KB RAM, 4 MB Flash |
-| Board | Kinetic Dynamics Nebula S3 |
-| RTC | DS3231 on I2C (SDA=8, SCL=9) |
-| EEPROM | AT24C512 on I2C |
-| LoRa | RFM95 on HSPI (MISO=12, MOSI=11, SCLK=13, CS=10, IRQ=14, RST=21) |
-| Relays | OH motor GPIO1, UG motor GPIO2 |
-| Buzzer | GPIO3 |
-| Float switch | GPIO47 (UG tank) |
-| Touch buttons | OH GPIO17, UG GPIO18 |
-| LCD | 16×2 I2C, auto-detected (0x3F on v2.0 board) |
+Pin columns differ per board revision — use the column matching your build environment.
+
+| Component | v1.x (default) | v2.0 (`BOARD_V2`) |
+| --- | --- | --- |
+| MCU | ESP32-S3-WROOM-1 N16R8 — 240 MHz dual-core, 320 KB RAM, 16 MB flash, PSRAM disabled | same |
+| Board | Kinetic Dynamics Nebula S3 | — |
+| I2C | SDA=18, SCL=17 | SDA=8, SCL=9 |
+| RTC | DS3231 on I2C (0x68) | same |
+| EEPROM | AT24C512 on I2C (0x50–0x57, auto-detected) | same |
+| LCD | 16×2 I2C, auto-detected (0x27 / 0x3F) | same |
+| LoRa | RFM95 on HSPI (MISO=12, MOSI=11, SCLK=13, CS=10, IRQ=14, RST=21) | DIO1 tied to GND |
+| Relay 1 | GPIO1 — motor | same |
+| Relay 2 | GPIO2 — motor | same |
+| Relay 3 | GPIO35 — changeover contactor *(not yet driven by firmware)* | same |
+| Energy meter | ADE7758 (3-phase) on SPI3, isolated via ISO6741; IRQ→GPIO46 via optocoupler *(not yet driven by firmware)* | same |
+| Buzzer | GPIO3 | same |
+| Float switch | GPIO42 (UG tank) | GPIO47 |
+| Touch buttons | OH=GPIO41, UG=GPIO40 | OH=GPIO17, UG=GPIO18 |
+
+> Relay logic is **active-HIGH** (`RELAY_ON = HIGH`) — BC847C low-side drivers.
+> The ADE7758 sits in a **mains-referenced ground domain** (`ADE_GND ≠ GND`);
+> the ISO6741 and optocoupler maintain that isolation. Never bridge the grounds.
 
 ## Build & Flash
 
 **Prerequisites:** PlatformIO Core or PlatformIO IDE extension.
 
-### OTA (over WiFi)
+### v1.x board (default target)
 
 ```bash
-pio run -e nebulas3 --target upload
+pio run -e nebulas3        --target upload   # OTA over WiFi
+pio run -e nebulas3_serial --target upload   # USB serial
 ```
 
-### Serial (USB, COM7)
+### v2.0 board
 
 ```bash
-pio run -e nebulas3_serial --target upload
+pio run -e nebulas3_v2        --target upload   # OTA over WiFi
+pio run -e nebulas3_v2_serial --target upload   # USB serial
 ```
 
 Hold **BOOT** button during "Connecting..." if auto-reset doesn't trigger.
