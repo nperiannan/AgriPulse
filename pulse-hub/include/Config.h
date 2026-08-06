@@ -74,9 +74,69 @@
 #define OH_RELAY_PIN  1    // RLY1 – Overhead tank motor
 #define UG_RELAY_PIN  2    // RLY2 – Underground tank motor
 
+// RLY3 – changeover contactor (selects which motor the single starter feeds).
+// GPIO35 is an octal-PSRAM pin on the N16R8 module; it is only usable because
+// platformio.ini sets `board_build.psram = disabled`.  Never enable PSRAM.
+#define CHANGEOVER_RELAY_PIN  35
+
 // Relay logic: HIGH = motor ON
 #define RELAY_ON   HIGH
 #define RELAY_OFF  LOW
+
+// =============================================================================
+//                  ADE7758 3-PHASE ENERGY METER  (SPI, isolated)
+// =============================================================================
+// The meter sits in a mains-referenced ground domain (ADE_GND != GND).  An
+// ISO6741 isolates the SPI lines; the IRQ returns via a CT4N25 optocoupler.
+//
+// LoRa already owns HSPI (= SPI3_HOST on the S3), so the meter is given FSPI
+// (= SPI2_HOST).  Separate peripherals, so a meter IRQ can never corrupt an
+// in-flight radio transaction — a failure the previous-generation controller
+// hit when both shared one bus.
+//
+// !! VERIFY AGAINST THE BOARD !!  These are traced from the v1 schematic net
+// labels, not yet confirmed on hardware.  ADE_CS_PIN is the least certain.
+#define ADE_SCLK_PIN   4
+#define ADE_MISO_PIN   5
+#define ADE_MOSI_PIN   6
+#define ADE_CS_PIN     7
+#define ADE_IRQ_PIN   46
+
+#define ADE_SPI_HZ            2000000UL  // datasheet max 2.5 MHz
+#define ADE_POLL_INTERVAL_MS     2000UL  // matches the reference controller
+
+// Readings below these are noise, not signal — clamp to zero.
+// (Values carried over from the field-proven previous controller.)
+#define ADE_MIN_VALID_VOLTS      20.0f
+#define ADE_MIN_VALID_AMPS        0.5f
+
+// Consecutive comms failures before escalating.
+#define ADE_FAIL_SOFT_RESET  2   // attempt a soft reset at this count
+#define ADE_FAIL_ALARM       3   // declare the meter dead at this count
+
+// -----------------------------------------------------------------------------
+// Calibration — raw register counts to engineering units.
+//
+// These MUST stay runtime-configurable: the CT is not yet chosen, and the
+// previous controller had to be re-flashed on every recalibration.  The values
+// here are only power-on defaults, overwritten from NVS when present.
+//
+// Voltage is per-phase because the 1 MΩ divider resistors have real tolerance.
+// Defaults are the measured constants from the previous controller's board;
+// they are a starting point for calibration, not correct for this board.
+#define ADE_VOLT_SCALE_A_DEFAULT   0.000210638f
+#define ADE_VOLT_SCALE_B_DEFAULT   0.000209760f
+#define ADE_VOLT_SCALE_C_DEFAULT   0.000211256f
+#define ADE_AMP_SCALE_DEFAULT      0.0000402983519f
+
+#define NVS_ADE_NS            "ade_cal"
+#define NVS_KEY_ADE_VSCALE_A  "vscale_a"
+#define NVS_KEY_ADE_VSCALE_B  "vscale_b"
+#define NVS_KEY_ADE_VSCALE_C  "vscale_c"
+#define NVS_KEY_ADE_ISCALE_A  "iscale_a"
+#define NVS_KEY_ADE_ISCALE_B  "iscale_b"
+#define NVS_KEY_ADE_ISCALE_C  "iscale_c"
+#define NVS_KEY_ADE_CALIBRATED "cal_done"
 
 // =============================================================================
 //                              UG TANK FLOAT SWITCH PINS
