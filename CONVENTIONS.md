@@ -1,10 +1,11 @@
-# TankMonitor Repo Conventions
+# AgriPulse Repo Conventions
 
 ## Repository
 
-- Monorepo: `controller_firmware/`, `transmitter_firmware/`, `web/`, `MobileApp/`
-- Remote: <https://github.com/nperiannan/TankMonitor.git>
-- Branch: `master`
+- Monorepo: `pulse-hub/` (controller firmware), `pulse-node/` (remote node firmware), `pulse-cloud/` (Go+React server), `pulse-app/` (Flutter app)
+- Remote: <https://github.com/nperiannan/AgriPulse.git>
+- Branch: `main`
+- **Never push this repo's work to `nperiannan/TankMonitor`** — it is a separate upstream project this code was ported from
 
 ## CRITICAL — Commit & Version Discipline
 
@@ -16,7 +17,7 @@
   2. Update `README.md` versions table
   3. `git add` + `git commit` with descriptive message
   4. `git tag -a <component>/vX.Y.Z -m "..."` (annotated tag)
-  5. `git push origin master && git push origin <tag>`
+  5. `git push origin main && git push origin <tag>`
   6. Delete old GitHub release for that component, create new one via `gh release create`
   7. Rebuild binary/image for the changed component and deploy/install
 - **Never let version strings drift** — the binary version, git tag, README table, and GitHub release must all agree
@@ -24,42 +25,43 @@
 
 ## Versioning & Tags
 
-- Tag format: `controller_firmware/vX.Y.Z`, `transmitter_firmware/vX.Y.Z`, `web/vX.Y.Z`, `MobileApp/vX.Y.Z`
+- Tag format: `pulse-hub/vX.Y.Z`, `pulse-node/vX.Y.Z`, `pulse-cloud/vX.Y.Z`, `pulse-app/vX.Y.Z`
 - **One release per component** — no combined multi-component releases
-- Tags must be **annotated** (not lightweight): `git tag -a web/vX.Y.Z -m "..."`
+- Tags must be **annotated** (not lightweight): `git tag -a pulse-cloud/vX.Y.Z -m "..."`
 - Version strings live in:
-  - Controller firmware: `controller_firmware/include/Config.h` → `#define FW_VERSION`
-  - Transmitter firmware: `transmitter_firmware/include/Config.h` → `#define FW_VERSION`
-  - Web backend: `web/backend/main.go` → `const webVersion`
-  - Web frontend: `web/frontend/src/App.tsx` → `const WEB_APP_VERSION` ← must ALSO be bumped (hardcoded, not fetched from server)
-  - App: Flutter `MobileApp/pubspec.yaml` → `version:` AND `MobileApp/lib/tank_service.dart` → `const mobileAppVersion` (both must be updated together)
+  - Hub firmware: `pulse-hub/include/Config.h` → `#define FW_VERSION`
+  - Node firmware: `pulse-node/include/Config.h` → `#define FW_VERSION`
+  - Cloud backend: `pulse-cloud/backend/main.go` → `const webVersion`
+  - Cloud frontend: `pulse-cloud/frontend/src/App.tsx` → `const WEB_APP_VERSION` ← must ALSO be bumped (hardcoded, not fetched from server)
+  - App: Flutter `pulse-app/pubspec.yaml` → `version:` AND `pulse-app/lib/tank_service.dart` → `const mobileAppVersion` (both must be updated together)
 - `README.md` versions table must also be updated on every bump
 
 ## GitHub Releases — IMPORTANT
 
-- **Exactly one release per component** on the releases page at all times (4 total: controller, transmitter, web, mobile)
+- **Exactly one release per component** on the releases page at all times (4 total: hub, node, cloud, app)
 - When creating a new release for a component, **always delete the previous release first**:
 
   ```bash
-  gh release delete controller_firmware/vX.Y.Z --cleanup-tag --yes
-  gh release create controller_firmware/vX.Y.Z firmware.bin --title "Controller Firmware vX.Y.Z" --notes "..."
+  gh release delete pulse-hub/vX.Y.Z --cleanup-tag --yes
+  gh release create pulse-hub/vX.Y.Z firmware.bin --title "Pulse Hub Firmware vX.Y.Z" --notes "..."
   ```
 
-- Release titles: `Controller Firmware vX.Y.Z`, `Transmitter Firmware vX.Y.Z`, `Web App vX.Y.Z`, `Mobile App vX.Y.Z`
+- Release titles: `Pulse Hub Firmware vX.Y.Z`, `Pulse Node Firmware vX.Y.Z`, `Pulse Cloud vX.Y.Z`, `Pulse App vX.Y.Z`
 - **Required assets per release** (critical for OTA and auto-update to work):
-  - `controller_firmware/vX.Y.Z` → must include `firmware.bin`
-  - `transmitter_firmware/vX.Y.Z` → must include `firmware.hex`
-  - `MobileApp/vX.Y.Z` → must include `app-release.apk`
-  - `web/vX.Y.Z` → source code only (deployed via Docker)
-- **Tag prefixes are load-bearing** — the mobile app auto-update scans for `MobileApp/` prefix
-  - Do NOT use `app/` — old prefix, no longer detected by the app
-  - Controller OTA uses the web app API (`/api/ota/check/{mac}`), not GitHub releases
+  - `pulse-hub/vX.Y.Z` → must include `firmware.bin`
+  - `pulse-node/vX.Y.Z` → must include `firmware.hex`
+  - `pulse-app/vX.Y.Z` → must include `app-release.apk`
+  - `pulse-cloud/vX.Y.Z` → source code only (deployed via Docker)
+- **Tag prefixes are load-bearing** — the app auto-update scans for the `pulse-app/` prefix and
+  `pulse-cloud/backend/github_poller.go` scans for `pulse-hub/`
+  - Do NOT use `app/` or `MobileApp/` — retired prefixes, no longer detected
+  - Hub OTA uses the cloud API (`/api/ota/check/{mac}`), not GitHub releases
 
 ## NAS Deployment (TNAS @ 192.168.0.102) — Decommissioned
 
 > **Superseded by Oracle Cloud VM** (see below). Kept for historical reference only.
 
-- Was at `/Volume1/docker/TankMonitor` with sparse-checkout (`web/` only)
+- Was at `/Volume1/docker/TankMonitor` with sparse-checkout (`web/` only) — legacy upstream project
 - git binary: `/home/nperiannan/miniconda3/bin/git`
 - docker binary: `/Volume1/@apps/DockerEngine/dockerd/bin/docker`
 
@@ -72,9 +74,9 @@
 - IP: `150.230.129.215` (static, Oracle Always Free tier)
 - OS: Rocky Linux 9.8, x86_64, 764 MB RAM + 5 GB swap
 - SSH: `ssh -i "~/.ssh/Oracle VMs/rocky/ssh-key-2026-06-06.key" hainatraj@150.230.129.215`
-- Docker: `tankmonitor-web` + `eclipse-mosquitto:2` on `tankmonitor` network
-- Data: `/opt/tankmonitor/data` (SQLite), `/opt/tankmonitor/mosquitto` (config/data/log)
-- Repo: `/opt/TankMonitor` (sparse checkout, `web/` only)
+- Docker: `agripulse-cloud` + `eclipse-mosquitto:2` on `agripulse` network
+- Data: `/opt/agripulse/data` (SQLite), `/opt/agripulse/mosquitto` (config/data/log)
+- Repo: `/opt/AgriPulse` (sparse checkout, `pulse-cloud/` only)
 - DNS: `nperiannan-nas.freemyip.com` → `150.230.129.215` (static A record, no DDNS needed)
 - VCN Security List: ports 22, 1880, 1883 open (0.0.0.0/0)
 - `OTA_BASE_URL=http://150.230.129.215:1880`
@@ -82,8 +84,8 @@
 
 ## OTA Flash Flow
 
-1. Build firmware locally: `pio run -e nebulas3_serial` → binary at `controller_firmware/.pio/build/nebulas3_serial/firmware.bin`
-2. Upload via web app **Firmware Update (OTA)** → **Upload firmware.bin**
+1. Build firmware locally: `pio run -e nebulas3_serial` → binary at `pulse-hub/.pio/build/nebulas3_serial/firmware.bin`
+2. Upload via Pulse Cloud **Firmware Update (OTA)** → **Upload firmware.bin**
 3. Click **Flash to ESP32**
 4. Backend publishes `ota_start` MQTT command with `OTA_BASE_URL`-based download URL
 5. ESP32 fetches binary over HTTP and flashes itself, then reboots
@@ -100,7 +102,7 @@
   ```bash
   git add CONVENTIONS.md
   git commit -m "docs: update CONVENTIONS.md — <what changed>"
-  git push origin master
+  git push origin main
   ```
 
 ## Security — NEVER commit credentials without approval
@@ -112,7 +114,7 @@
 ## Git Notes
 
 - `credential-winced` warning on push is harmless (typo in git credential helper config)
-- Flutter auto-generated files (`MobileApp/linux/`, `MobileApp/macos/`, `MobileApp/windows/`) are not committed unless intentionally changed
+- Flutter auto-generated files (`pulse-app/linux/`, `pulse-app/macos/`, `pulse-app/windows/`) are not committed unless intentionally changed
 
 ## Terminal Hygiene
 

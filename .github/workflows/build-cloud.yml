@@ -1,0 +1,76 @@
+name: Build & Publish Pulse Cloud
+
+# Builds the pulse-cloud/ Docker image (Go backend + React frontend) in GitHub
+# Actions and pushes it to GitHub Container Registry, so the cloud VM no longer
+# has to run a slow `docker build --no-cache` locally (npm install ~3.5m,
+# vite build ~8.5m, go build ~15m).
+#
+# This workflow only BUILDS and PUBLISHES the image. Deploying it to the
+# VM is a separate, deliberate step — see pulse-cloud/deploy_oracle_ghcr.sh.
+
+on:
+  push:
+    tags:
+      - 'pulse-cloud/v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to build (e.g. 2.4.0) — required for manual runs'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/agripulse-cloud
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#pulse-cloud/v}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building pulse-cloud/v${VERSION}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./pulse-cloud
+          file: ./pulse-cloud/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### Published image" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy on the Oracle VM with: \`bash deploy_oracle_ghcr.sh ${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,7 @@
-# TankMonitor — MQTT Protocol Reference
+# AgriPulse — MQTT Protocol Reference
 
 Describes every MQTT topic used between the **ESP32-S3 controller firmware**
-(`controller_firmware/src/MQTTManager.cpp`) and the **Go backend**
+(`pulse-hub/src/MQTTManager.cpp`) and the **Go backend**
 (`web/backend/mqtt.go`, `heartbeat.go`, `ota.go`, `ws.go`), including payload
 schemas, QoS/retain flags, and the end-to-end flow for client commands
 (mobile app / web UI → backend → controller).

@@ -1,14 +1,14 @@
-# release.ps1 — Create a GitHub release for a TankMonitor component
+# release.ps1 — Create a GitHub release for an AgriPulse component
 # Enforces: one release per component, annotated tags, correct assets, proper titles.
 #
 # Usage:
-#   .\release.ps1 -Component web -Version 2.1.0 -Notes "Fixed X, Added Y"
-#   .\release.ps1 -Component controller_firmware -Version 2.1.0 -Asset .\build\firmware.bin -Notes "Fixed Z"
-#   .\release.ps1 -Component MobileApp -Version 2.0.1 -Asset .\build\app-release.apk -Notes "Bug fix"
-#   .\release.ps1 -Component transmitter_firmware -Version 2.0.1 -Asset .\build\firmware.hex -Notes "Calibration fix"
+#   .\release.ps1 -Component pulse-cloud -Version 2.1.0 -Notes "Fixed X, Added Y"
+#   .\release.ps1 -Component pulse-hub -Version 2.1.0 -Asset .\build\firmware.bin -Notes "Fixed Z"
+#   .\release.ps1 -Component pulse-app -Version 2.0.1 -Asset .\build\app-release.apk -Notes "Bug fix"
+#   .\release.ps1 -Component pulse-node -Version 2.0.1 -Asset .\build\firmware.hex -Notes "Calibration fix"
 param(
     [Parameter(Mandatory)]
-    [ValidateSet("controller_firmware", "transmitter_firmware", "web", "MobileApp")]
+    [ValidateSet("pulse-hub", "pulse-node", "pulse-cloud", "pulse-app")]
     [string]$Component,
 
     [Parameter(Mandatory)]
@@ -25,10 +25,10 @@ $ErrorActionPreference = 'Stop'
 
 # ── Component metadata ──────────────────────────────────────────────
 $meta = @{
-    controller_firmware  = @{ Title = "Controller Firmware";  RequiredAsset = "firmware.bin" }
-    transmitter_firmware = @{ Title = "Transmitter Firmware"; RequiredAsset = "firmware.hex" }
-    web                  = @{ Title = "Web App";              RequiredAsset = $null }
-    MobileApp            = @{ Title = "Mobile App";           RequiredAsset = "app-release.apk" }
+    'pulse-hub'   = @{ Title = "Pulse Hub Firmware";  RequiredAsset = "firmware.bin" }
+    'pulse-node'  = @{ Title = "Pulse Node Firmware"; RequiredAsset = "firmware.hex" }
+    'pulse-cloud' = @{ Title = "Pulse Cloud";         RequiredAsset = $null }
+    'pulse-app'   = @{ Title = "Pulse App";           RequiredAsset = "app-release.apk" }
 }
 
 $info          = $meta[$Component]
@@ -111,7 +111,7 @@ if ($Asset) {
 
 Write-Host ""
 Write-Host "==> Release created successfully!" -ForegroundColor Green
-Write-Host "    https://github.com/nperiannan/TankMonitor/releases/tag/$TagName" -ForegroundColor Green
+Write-Host "    https://github.com/nperiannan/AgriPulse/releases/tag/$TagName" -ForegroundColor Green
 
 # ── Verify: exactly one release per component ───────────────────────
 Write-Host ""

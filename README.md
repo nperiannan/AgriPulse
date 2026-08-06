@@ -1,6 +1,61 @@
-# TankMonitor
+# AgriPulse
 
-Monorepo for the TankMonitor system — ESP32-S3 firmware, Go+React web app, and Flutter mobile app.
+**AgriPulse** is an open-source smart agriculture automation platform that enables
+intelligent farm management through IoT, automation, and real-time monitoring.
+
+It is designed to be modular, reliable, and extensible — scaling from a single
+borewell and tank on a smallholding up to multi-zone irrigation across a large farm.
+
+## Platform Capabilities
+
+- Smart irrigation and zone control
+- Borewell and water pump automation
+- Water tank level monitoring
+- Soil moisture and environmental sensing
+- Solenoid valve management
+- Power and energy monitoring
+- Remote monitoring and notifications
+- Home Assistant integration
+- ESP32-based distributed controllers
+- LoRa, Wi-Fi, Ethernet, and 4G connectivity
+- Scalable farm automation architecture
+
+> **Project status.** **Pulse Hub** is the component under active development.
+> **Pulse Cloud**, **Pulse App**, and **Pulse Node** were carried over from an
+> earlier tank-monitoring project and will be redesigned for AgriPulse once the
+> hub is feature-complete. Their current documentation below describes the
+> system *as it runs today*, not the final design.
+
+---
+
+## Components
+
+| Folder | Name | What it is |
+| --- | --- | --- |
+| `pulse-hub/` | **Pulse Hub** | ESP32-S3 controller in the field — the brain |
+| `pulse-node/` | **Pulse Node** | Remote LoRa unit — senses, actuates, or both |
+| `pulse-cloud/` | **Pulse Cloud** | Go + React server and MQTT broker on a VM |
+| `pulse-app/` | **Pulse App** | Flutter mobile client |
+
+---
+
+## System Topology
+
+AgriPulse keeps the proven three-tier flow:
+
+1. **Pulse Hub** — an ESP32-S3 in the field runs all real-time logic (pumps,
+   valves, level thresholds, schedules, interlocks). It keeps working
+   autonomously even with no network.
+2. **Pulse Cloud on a VM** — a Go backend + React UI, paired with a Mosquitto
+   MQTT broker. It is the always-on remote access point, history store, and OTA
+   firmware server.
+3. **Pulse App** — a Flutter client talking to Pulse Cloud over HTTP/WebSocket,
+   plus BLE directly to the hub for first-time provisioning.
+
+**For large farms, LoRa carries both directions**: Pulse Nodes send sensor
+readings (tank level, soil moisture, flow, power) to the hub *and* receive
+control signals back from it — so valves and pumps spread across distant plots
+can be driven without running Wi-Fi or cable to every zone.
 
 ---
 
@@ -9,14 +64,15 @@ Monorepo for the TankMonitor system — ESP32-S3 firmware, Go+React web app, and
 ```mermaid
 flowchart TD
     subgraph Field["Field Hardware"]
-        TX["Transmitter Node\nATmega328P + LoRa\nOH Tank Level Sensor\nFW v2.1.0"]
-        CTRL["Controller\nESP32-S3 Nebula S3\nFW v2.10.0"]
-        TX -- "LoRa 865 MHz · level packets" --> CTRL
+        ZONE["Pulse Node(s)\nMCU + LoRa\nSoil moisture · Tank level\nSolenoid valves · Pumps"]
+        CTRL["Pulse Hub\nESP32-S3 Nebula S3\nFW v2.10.0"]
+        ZONE -- "LoRa 865 MHz · sensor telemetry" --> CTRL
+        CTRL -- "LoRa 865 MHz · valve / pump commands" --> ZONE
     end
 
-    subgraph Server["Oracle Cloud VM · 150.230.129.215"]
+    subgraph Server["Cloud VM · 150.230.129.215"]
         MQ["Mosquitto\nMQTT Broker · :1883"]
-        WEB["Web App\nGo Backend + React UI\n:1880"]
+        WEB["Pulse Cloud\nGo Backend + React UI\n:1880"]
         MQ <--> WEB
     end
 
@@ -25,12 +81,16 @@ flowchart TD
     CTRL -. "HTTP OTA poll · every 5 min" .-> WEB
 
     BROWSER["Web Browser"]
-    APP["Mobile App\nFlutter Android · v2.21.0"]
+    APP["Pulse App\nFlutter Android · v2.21.0"]
 
     BROWSER <-- "HTTP + WebSocket · :1880" --> WEB
     APP <-- "HTTP + WebSocket · :1880" --> WEB
     APP -. "BLE · initial setup only" .-> CTRL
 ```
+
+> On a small installation the LoRa tier is optional — the hub drives its
+> local relays and float switches directly. Pulse Nodes are added when zones are
+> too far apart to wire.
 
 ---
 
@@ -38,20 +98,22 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph OH_Node["OH Tank Node"]
-        F_OH["Float Switches\nFULL / HALF / LOW"]
-        TXmcu["ATmega328P\nFW v2.1.0"]
+    subgraph Remote["Pulse Node (large farms)"]
+        SENS["Sensors\nFloat switches · Soil moisture\nFlow · Energy meter"]
+        TXmcu["Node MCU\nFW v2.1.0"]
         TXlora["LoRa RFM95\n865 MHz"]
-        F_OH --> TXmcu --> TXlora
+        VALVE["Solenoid Valves\n+ Zone Pump"]
+        SENS --> TXmcu --> TXlora
+        TXmcu --> VALVE
     end
 
-    subgraph ESP32["Controller · ESP32-S3 Nebula S3"]
+    subgraph ESP32["Pulse Hub · ESP32-S3 Nebula S3"]
         RXlora["LoRa RFM95\nHSPI CS=10 IRQ=14 RST=21"]
-        F_UG["UG Float Switch\nGPIO 47"]
+        F_UG["Local Float Switch\nGPIO 47"]
         TOUCH["Touch Switches\nGPIO 17 / 18"]
         MCU["ESP32-S3\nFW v2.10.0"]
-        R_OH["OH Relay\nGPIO 1"]
-        R_UG["UG Relay\nGPIO 2"]
+        R_OH["Relay 1\nGPIO 1"]
+        R_UG["Relay 2\nGPIO 2"]
         BUZ["Buzzer\nGPIO 3"]
         LCD["LCD 16x2\nI2C 0x3F\nSDA=8 SCL=9"]
         RTC["RTC DS3231\nAT24C512 EEPROM"]
@@ -64,16 +126,17 @@ flowchart LR
         MCU --> R_UG
         MCU --> BUZ
         MCU --> LCD
+        MCU --> RXlora
     end
 
-    subgraph Actuators["Actuators"]
-        OH_M["Overhead Tank\nMotor / Pump"]
-        UG_M["Underground Tank\nMotor / Pump"]
+    subgraph Actuators["Local Actuators"]
+        OH_M["Overhead Tank\nPump"]
+        UG_M["Borewell / Sump\nPump"]
     end
 
-    subgraph OCI["Oracle Cloud VM · 150.230.129.215"]
+    subgraph OCI["Pulse Cloud · VM 150.230.129.215"]
         MQ["Mosquitto\nMQTT Broker\n:1883"]
-        GO["Go Backend\n:8080\nweb v2.8.0"]
+        GO["Go Backend\n:8080\nv2.8.0"]
         STATIC["React Frontend\nserved as static"]
         DB[("SQLite\n/data/tankmonitor.db")]
         GO --- MQ
@@ -81,16 +144,17 @@ flowchart LR
         GO --- STATIC
     end
 
-    subgraph Cloud["Oracle Cloud VCN"]
+    subgraph Cloud["Cloud VCN"]
         PF["Security List\n:1880 + :1883 open"]
     end
 
     subgraph Clients["Client Devices"]
         BROWSER["Web Browser"]
-        PHONE["Mobile App\nFlutter · v2.20.2"]
+        PHONE["Pulse App\nFlutter"]
     end
 
-    TXlora -->|"LoRa 865 MHz / FloatPacket 4B"| RXlora
+    TXlora -->|"LoRa telemetry"| RXlora
+    RXlora -->|"LoRa control signal"| TXlora
     R_OH --> OH_M
     R_UG --> UG_M
 
@@ -113,33 +177,38 @@ flowchart LR
 
 | Link | Protocol | Port / Medium | Direction |
 | --- | --- | --- | --- |
-| Transmitter → Controller | LoRa 865 MHz | RF (FloatPacket 4B) | One-way |
-| Controller ↔ MQTT Broker | MQTT over TCP | 1883 | Bidirectional |
-| Controller → Web App | HTTP | 1880 (OTA poll every 5 min) | Outbound |
-| Web App → Controller | HTTP | via MQTT ota_start cmd | Triggered |
-| Browser / App ↔ Web App | HTTP REST + WebSocket | 1880 | Bidirectional |
-| Mobile App → Controller | BLE | RF | Setup only |
-| Internet → VM | Oracle Cloud VCN Security List | 1880 / 1883 | Inbound |
+| Pulse Node ↔ Pulse Hub | LoRa 865 MHz | RF | Bidirectional (telemetry + control) |
+| Pulse Hub ↔ MQTT Broker | MQTT over TCP | 1883 | Bidirectional |
+| Pulse Hub → Pulse Cloud | HTTP | 1880 (OTA poll every 5 min) | Outbound |
+| Pulse Cloud → Pulse Hub | HTTP | via MQTT ota_start cmd | Triggered |
+| Browser / App ↔ Pulse Cloud | HTTP REST + WebSocket | 1880 | Bidirectional |
+| Pulse App → Pulse Hub | BLE | RF | Setup only |
+| Internet → VM | Cloud VCN Security List | 1880 / 1883 | Inbound |
+
+> Today's Pulse Node firmware sends a one-way 4-byte `FloatPacket`. The
+> bidirectional LoRa control path shown above is the AgriPulse target design and
+> lands with the multi-zone hub work.
 
 ---
 
 ## Repository Structure
 
 ```text
-TankMonitor/
-├── controller_firmware/   ESP32-S3 firmware (PlatformIO + Arduino framework)
-├── web/                   Go backend + React/Ant Design frontend (Docker-deployed on Oracle Cloud VM)
-└── MobileApp/             Flutter Android mobile app
+AgriPulse/
+├── pulse-hub/     ESP32-S3 hub firmware (PlatformIO + Arduino framework) — active development
+├── pulse-node/    Remote LoRa node firmware — senses and/or actuates (ATmega328P)
+├── pulse-cloud/   Go backend + React/Ant Design frontend (Docker-deployed on a cloud VM)
+└── pulse-app/     Flutter mobile app
 ```
 
 ## Versions
 
 | Component | Latest |
 | --- | --- |
-| Controller Firmware | v2.10.0 |
-| Transmitter Firmware | v2.1.0 |
-| Web App | v2.8.0 |
-| Mobile App | v2.21.0 |
+| Pulse Hub | v2.10.0 |
+| Pulse Node | v2.1.0 |
+| Pulse Cloud | v2.8.0 |
+| Pulse App | v2.21.0 |
 
 ---
 
@@ -173,33 +242,37 @@ broadcasts its own AP for initial setup.
 
 | Parameter | Value |
 | --- | --- |
-| SSID | `TankMonitor` |
+| SSID | `AgriPulse` |
 | Password | *(see private config)* |
 | IP address | `192.168.4.1` |
 | Config page | <http://192.168.4.1> |
 
-> **Initial Wi-Fi setup**: Connect your phone/laptop to the `TankMonitor` AP,
-> open <http://192.168.4.1> in a browser, and add your home Wi-Fi SSID/password.
-> The device will reboot and connect to your home network.
+> **Initial Wi-Fi setup**: Connect your phone/laptop to the `AgriPulse` AP,
+> open <http://192.168.4.1> in a browser, and add your Wi-Fi SSID/password.
+> The device will reboot and connect to your network.
 
 ---
 
-### MQTT Broker (Mosquitto on Oracle Cloud VM)
+### MQTT Broker (Mosquitto on the cloud VM)
 
 | Parameter | Value |
 | --- | --- |
 | VM IP | `150.230.129.215` |
 | Public domain | `nperiannan-nas.freemyip.com` |
 | Port | `1883` (plain) |
-| Username | `tankmonitor` |
+| Username | *(see private config)* |
 | Password | *(see private config)* |
-| Status topic | `tankmonitor/home/status` |
-| Control topic | `tankmonitor/home/control` |
-| Logs topic | `tankmonitor/home/logs` |
+| Status topic | `tm/{mac}/status` |
+| Control topic | `tm/{mac}/control` |
+| Logs topic | `tm/{mac}/logs` |
+
+> Topic and credential names are inherited from the upstream project and are
+> scheduled for renaming alongside the web app redesign. See
+> [MQTT_PROTOCOL.md](MQTT_PROTOCOL.md) for the full message contract.
 
 ---
 
-### Web App
+### Pulse Cloud
 
 | Parameter | Value |
 | --- | --- |
@@ -209,9 +282,9 @@ broadcasts its own AP for initial setup.
 
 ---
 
-### Mobile App
+### Pulse App
 
-Install the latest APK from the [GitHub Releases](https://github.com/nperiannan/TankMonitor/releases/latest).
+Install the latest APK from the [GitHub Releases](https://github.com/nperiannan/AgriPulse/releases/latest).
 
 On first launch:
 
@@ -227,7 +300,7 @@ On first launch:
 
 | Service | Host | Container name |
 | --- | --- | --- |
-| Web App | `150.230.129.215:1880` → container port 8080 | `tankmonitor-web` |
+| Pulse Cloud | `150.230.129.215:1880` → container port 8080 | `agripulse-cloud` |
 | MQTT Broker | `150.230.129.215:1883` | `mosquitto` |
 
 - **OS**: Rocky Linux 9.8 (x86_64, Oracle Always Free tier)
@@ -241,7 +314,7 @@ The following ingress ports are open in the VCN security list:
 | Port | Protocol | Service |
 | --- | --- | --- |
 | 22 | TCP | SSH |
-| 1880 | TCP | Web App |
+| 1880 | TCP | Pulse Cloud |
 | 1883 | TCP | MQTT |
 
 ### First-time VM setup (sparse checkout — `web/` only)
@@ -249,41 +322,59 @@ The following ingress ports are open in the VCN security list:
 Run once on the VM via SSH:
 
 ```bash
-# Sparse clone — fetches objects only for web/
+# Sparse clone — fetches objects only for pulse-cloud/
 git clone --no-checkout --filter=blob:none \
-  https://github.com/nperiannan/TankMonitor.git \
-  /opt/TankMonitor
+  https://github.com/nperiannan/AgriPulse.git \
+  /opt/AgriPulse
 
-cd /opt/TankMonitor
+cd /opt/AgriPulse
 git sparse-checkout init --cone
-git sparse-checkout set web
-git checkout master
+git sparse-checkout set pulse-cloud
+git checkout main
 ```
 
-After this the layout is `/opt/TankMonitor/web/{Dockerfile,backend/,frontend/,build_web.sh}`.
-Future updates via `git pull` will download only `web/` changes.
+After this the layout is `/opt/AgriPulse/pulse-cloud/{Dockerfile,backend/,frontend/,build.sh}`.
+Future updates via `git pull` will download only `pulse-cloud/` changes.
+
+### One-time migration from the old TankMonitor deployment
+
+The deploy scripts now use `agripulse` naming throughout. If the VM still hosts
+the previous `tankmonitor-*` stack, run this **once** before the first AgriPulse
+deploy — otherwise `docker run` will fail with "network agripulse not found":
+
+```bash
+sudo systemctl stop docker || true          # optional: quiesce writes first
+docker stop tankmonitor-web && docker rm tankmonitor-web
+sudo mv /opt/tankmonitor /opt/agripulse     # keeps the existing SQLite DB
+sudo mv /opt/TankMonitor /opt/AgriPulse     # or re-clone as shown above
+docker network create agripulse
+docker network connect agripulse mosquitto  # attach the existing broker
+```
+
+The SQLite file keeps its old name inside the volume (`/data/tankmonitor.db`), so
+no data is lost by the move.
 
 ---
 
-### Deploy / Update the Web App
+### Deploy / Update Pulse Cloud
 
 SSH into the VM and run:
 
 ```bash
-cd /opt/TankMonitor/web
-bash build_web.sh
+cd /opt/AgriPulse/pulse-cloud
+bash build.sh
 ```
 
 The script:
 
-1. `git -C .. pull origin master` (pulls latest `web/` changes)
-2. `docker build -t tankmonitor-web:<version> .`
+1. `git -C .. pull origin main` (pulls latest `pulse-cloud/` changes)
+2. `docker build -t agripulse-cloud:<version> .`
 3. Stops/removes old container and starts a fresh one with all required env vars
 
 ### Check container logs
 
 ```bash
-docker logs --tail 50 tankmonitor-web
+docker logs --tail 50 agripulse-cloud
 ```
 
 ---
@@ -293,16 +384,16 @@ docker logs --tail 50 tankmonitor-web
 ### Serial flash (USB, first-time or recovery)
 
 ```bash
-cd controller_firmware
+cd pulse-hub
 pio run -e nebulas3_serial -t upload   # COM7 on Windows
 ```
 
 ### OTA via build script (recommended)
 
-From the `controller_firmware/` directory on Windows:
+From the `pulse-hub/` directory on Windows:
 
 ```powershell
-cd controller_firmware
+cd pulse-hub
 .\build.ps1 -Upload
 ```
 
@@ -315,7 +406,7 @@ copies `firmware.bin` to the VM via SCP (using your SSH key), and triggers OTA v
 > ESP32 downloads, flashes, and reboots automatically.  
 > MQTT does **not** need to be connected for OTA to work.
 
-### OTA via Mobile App
+### OTA via Pulse App
 
 1. Open the app → go to **Settings tab** → **FIRMWARE UPDATE (OTA)**.
 2. **Step 1**: tap **Choose firmware.bin** → pick the `.bin` file from your phone.
@@ -325,7 +416,7 @@ copies `firmware.bin` to the VM via SCP (using your SSH key), and triggers OTA v
    - `triggered` → `ack_received` (ESP32 confirmed) → `downloading` (flashing) → `success`
 5. On success the device reboots into the new firmware.
 
-### OTA via Web App
+### OTA via Pulse Cloud
 
 1. Open <http://nperiannan-nas.freemyip.com:1880>, log in.
 2. Go to **Firmware Update (OTA)** → click **Upload firmware.bin** → select the `.bin` file.
@@ -337,10 +428,10 @@ copies `firmware.bin` to the VM via SCP (using your SSH key), and triggers OTA v
 
 ---
 
-## Mobile App — Build & Release
+## Pulse App — Build & Release
 
 ```bash
-cd MobileApp
+cd pulse-app
 flutter build apk --release
 # Output: build/app/outputs/flutter-apk/app-release.apk
 ```
@@ -348,7 +439,7 @@ flutter build apk --release
 Create a GitHub release with the APK attached:
 
 ```powershell
-.\release.ps1 -Component MobileApp -Version X.Y.Z -Asset .\build\app\outputs\flutter-apk\app-release.apk -Notes "Description of changes"
+.\release.ps1 -Component pulse-app -Version X.Y.Z -Asset .\build\app\outputs\flutter-apk\app-release.apk -Notes "Description of changes"
 ```
 
 ---
@@ -369,18 +460,18 @@ Configurable from the web app (Settings card) or mobile app (Settings section).
 
 ```bash
 # Clone
-git clone https://github.com/nperiannan/TankMonitor.git
-cd TankMonitor
+git clone https://github.com/nperiannan/AgriPulse.git
+cd AgriPulse
 
 # Work on firmware
- cd controller_firmware && pio run ...
-# Work on web app
-cd web/frontend && npm run dev     # dev server
-cd web && docker build ...         # production
+ cd pulse-hub && pio run ...
+# Work on the cloud app
+cd pulse-cloud/frontend && npm run dev     # dev server
+cd pulse-cloud && docker build ...        # production
 
-# Work on mobile app
-cd MobileApp && flutter run              # debug on device
-cd MobileApp && flutter build apk ...    # release APK
+# Work on the mobile app
+cd pulse-app && flutter run              # debug on device
+cd pulse-app && flutter build apk ...    # release APK
 ```
 
 ### Commit & push
@@ -388,7 +479,7 @@ cd MobileApp && flutter build apk ...    # release APK
 ```bash
 git add -A
 git commit -m "component: description"
-git push origin master
+git push origin main
 ```
 
 ### Create a release
@@ -396,16 +487,11 @@ git push origin master
 Use the `release.ps1` script — it enforces one release per component, annotated tags, and required assets:
 
 ```powershell
-.\release.ps1 -Component web -Version 2.1.0 -Notes "Fixed X; Added Y"
-.\release.ps1 -Component controller_firmware -Version 2.1.0 -Asset .\build\firmware.bin -Notes "Fixed Z"
-.\release.ps1 -Component MobileApp -Version 2.0.1 -Asset .\build\app-release.apk -Notes "Bug fix"
-.\release.ps1 -Component transmitter_firmware -Version 2.0.1 -Asset .\build\firmware.hex -Notes "Cal fix"
+.\release.ps1 -Component pulse-cloud -Version 2.1.0 -Notes "Fixed X; Added Y"
+.\release.ps1 -Component pulse-hub -Version 2.1.0 -Asset .\build\firmware.bin -Notes "Fixed Z"
+.\release.ps1 -Component pulse-app -Version 2.0.1 -Asset .\build\app-release.apk -Notes "Bug fix"
+.\release.ps1 -Component pulse-node -Version 2.0.1 -Asset .\build\firmware.hex -Notes "Cal fix"
 ```
 
-### Sync a subfolder from its old repo (one-off)
-
-```bash
-git subtree pull --prefix=controller_firmware https://github.com/nperiannan/Tank-Monitor-Float.git master
-git subtree pull --prefix=web      https://github.com/nperiannan/TankMonitor-Web.git master
-git subtree pull --prefix=MobileApp https://github.com/nperiannan/TankMonitor-App.git master
-```
+> AgriPulse has no published releases yet. Until the first tag exists, the app's
+> update check and the backend's firmware poller will simply find nothing.
