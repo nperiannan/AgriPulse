@@ -22,6 +22,7 @@
 #include "MQTTManager.h"
 #include "ADE7758.h"
 #include "MotorProtection.h"
+#include "MotorDrive.h"
 
 // =============================================================================
 //                              GLOBAL STATE DEFINITIONS
@@ -97,6 +98,7 @@ void setup() {
     // of the system still runs, but current/voltage protection stays disarmed.
     adeInit();
     protInit();
+    motorDriveInit();
 
     // LoRa for OH tank remote node
     initLoRa();
@@ -162,9 +164,15 @@ void loop() {
     adePoll();
 
     // --- Motor auto-control ---
-    autoControlOHMotor();
-    autoControlUGMotor();
-    processPendingMotorStarts();
+    // The latching-starter drive owns the relays when enabled, so the legacy
+    // OH/UG level logic must not also drive them.
+    if (motorDriveEnabled()) {
+        motorDriveTask();
+    } else {
+        autoControlOHMotor();
+        autoControlUGMotor();
+        processPendingMotorStarts();
+    }
     motorHeartbeat();
 
     // --- Buzzer pattern update ---

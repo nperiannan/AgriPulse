@@ -193,6 +193,32 @@
 #define NVS_KEY_PROT_ARM_UNCAL  "arm_uncal"
 
 // =============================================================================
+//                    MOTOR DRIVE  (two-wire latching starter)
+// =============================================================================
+// RLY1 and RLY2 are momentary START and STOP pushbuttons across a latching
+// starter — they are pulsed, never held.  The starter latches itself, which
+// means the relay state says nothing about whether the motor is actually
+// turning: it can be started at the panel, tripped by its own overload, or
+// dropped by a power cut without the firmware ever seeing it.  Measured
+// current is the only trustworthy indication that the motor is running.
+#define MOTOR_PULSE_MS            1000UL   // matches the previous controller
+
+// The changeover contactor must only move with the motor stopped — switching
+// under load arcs and welds the contacts.  Wait for current to fall, then let
+// the contactor settle before pulsing START again.
+#define CHANGEOVER_SETTLE_MS      2000UL
+#define QUIESCENT_TIMEOUT_MS     15000UL   // giving up waiting for current to fall
+
+// Anti-short-cycle. Restarting against residual head, or cycling a compressor,
+// damages both. Enforced regardless of who requests the start.
+#define MOTOR_MIN_OFF_MS_DEFAULT 180000UL
+
+#define NVS_DRIVE_NS            "motor_drv"
+#define NVS_KEY_DRIVE_ENABLED   "enabled"
+#define NVS_KEY_DRIVE_MIN_OFF   "min_off"
+#define NVS_KEY_DRIVE_LOCKOUT   "lockout"
+
+// =============================================================================
 //                              UG TANK FLOAT SWITCH PINS
 // =============================================================================
 // Single-pin wiring (3-wire float switch):

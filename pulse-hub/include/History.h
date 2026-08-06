@@ -36,6 +36,8 @@ typedef enum : uint8_t {
     REASON_BOOT_SW       = 12,  // BOOT: software / OTA reset
     REASON_BOOT_BROWN    = 13,  // BOOT: brownout reset
     REASON_BOOT_OTHER    = 14,  // BOOT: panic / watchdog / other
+    REASON_PROTECTION    = 15,  // OFF: electrical protection trip
+    REASON_LOCKOUT       = 16,  // OFF/refused: maintenance lockout active
 } HistReason;
 
 // =============================================================================
