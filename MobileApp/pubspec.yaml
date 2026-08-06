@@ -1,0 +1,39 @@
+name: tank_monitor
+description: Tank Monitor - remote control app for ESP32 water tank system
+publish_to: none
+version: 2.21.0+55
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  web_socket_channel: ^3.0.1
+  shared_preferences: ^2.3.2
+  http: ^1.2.2
+  provider: ^6.1.2
+  connectivity_plus: ^6.0.0
+  open_filex: ^4.7.0
+  path_provider: ^2.1.4
+  file_picker: ^8.1.2
+  flutter_local_notifications: ^18.0.1
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+  vibration: ^2.0.0
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+
+flutter:
+  uses-material-design: true

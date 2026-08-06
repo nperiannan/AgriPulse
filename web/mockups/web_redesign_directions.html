@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web App — 3 complete redesign directions</title>
+<style>
+  *{box-sizing:border-box;}
+  body{
+    background:#0a0a0f; margin:0; padding:32px; font-family:'Segoe UI',Roboto,Arial,sans-serif;
+    display:flex; gap:36px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+  }
+  .col{display:flex; flex-direction:column; align-items:center; gap:10px; max-width:720px;}
+  .col h2{color:#fff; font-size:16px; font-weight:800; margin:0; text-align:center;}
+  .col h3{color:#8892a6; font-size:11.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; margin:0 0 -4px;}
+  .col p.desc{color:#9aa; font-size:12.5px; max-width:680px; text-align:center; margin:0 0 6px; line-height:1.5;}
+  .browser{
+    width:700px; border-radius:12px; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,.6);
+  }
+  .chrome{
+    background:#0f0f0f; padding:8px 12px; display:flex; align-items:center; gap:6px;
+    border-bottom:1px solid #262626;
+  }
+  .chrome .dot{width:9px; height:9px; border-radius:50%;}
+  .chrome .dot.r{background:#ff5f56;} .chrome .dot.y{background:#ffbd2e;} .chrome .dot.g{background:#27c93f;}
+  .chrome .url{flex:1; margin-left:8px; background:#1c1c1c; border-radius:6px; padding:3px 10px; color:#666; font-size:10.5px; font-family:monospace;}
+  .divider{width:100%; max-width:1500px; height:1px; background:#222; margin:18px 0;}
+  .sectionhdr{width:100%; text-align:center; margin-bottom:6px;}
+  .sectionhdr .tag{display:inline-block; background:#1a1a24; border:1px solid #333; color:#fff; padding:5px 16px; border-radius:20px; font-size:12px; font-weight:800; letter-spacing:.5px;}
+
+  /* ============================================================= */
+  /* DIRECTION A — "Aqua Glass": gradient bg, glassmorphism, organic */
+  /* ============================================================= */
+  .aqua-page{
+    background:linear-gradient(160deg,#0c2b3d 0%,#0a3550 35%,#0c1f3a 100%);
+    padding:22px; min-height:560px; position:relative; overflow:hidden;
+  }
+  .aqua-page::before{
+    content:""; position:absolute; width:340px; height:340px; border-radius:50%;
+    background:radial-gradient(circle,rgba(56,189,248,.35),transparent 70%);
+    top:-120px; right:-80px;
+  }
+  .aqua-nav{
+    display:flex; align-items:center; gap:14px; margin-bottom:20px; position:relative; z-index:1;
+    background:rgba(255,255,255,.06); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,.12);
+    border-radius:16px; padding:10px 16px;
+  }
+  .aqua-brand{color:#fff; font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;}
+  .aqua-nav .spacer{flex:1;}
+  .aqua-navlink{color:rgba(255,255,255,.65); font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:10px;}
+  .aqua-navlink.active{background:rgba(56,189,248,.25); color:#7dd3fc;}
+  .aqua-live{display:flex; align-items:center; gap:5px; color:#4ade80; font-size:11.5px; font-weight:700;}
+  .aqua-live i{width:6px; height:6px; border-radius:50%; background:#4ade80; box-shadow:0 0 8px #4ade80;}
+
+  .aqua-glass{
+    background:rgba(255,255,255,.08); backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,.14);
+    border-radius:22px; padding:20px; position:relative; z-index:1;
+  }
+  .aqua-row{display:flex; gap:16px; margin-bottom:16px;}
+  .aqua-tank{flex:1; text-align:center;}
+  .aqua-tank .lbl{color:rgba(255,255,255,.6); font-size:11px; font-weight:700; letter-spacing:.6px; text-transform:uppercase;}
+  .aqua-orb{
+    width:110px; height:110px; border-radius:50%; margin:12px auto; position:relative;
+    background:conic-gradient(#38bdf8 0% var(--p,100%), rgba(255,255,255,.08) var(--p,100%) 100%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 30px rgba(56,189,248,.35);
+  }
+  .aqua-orb::before{content:""; position:absolute; inset:10px; border-radius:50%; background:#0d2b40;}
+  .aqua-orb span{position:relative; z-index:1; color:#fff; font-size:19px; font-weight:800;}
+  .aqua-state{color:#7dd3fc; font-size:13px; font-weight:700; margin-top:2px;}
+  .aqua-btnrow{display:flex; gap:8px; margin-top:12px;}
+  .aqua-btn{flex:1; padding:9px 0; border-radius:12px; border:none; font-weight:700; font-size:12px; cursor:pointer;}
+  .aqua-btn.on{background:linear-gradient(135deg,#38bdf8,#0ea5e9); color:#04263a;}
+  .aqua-btn.off{background:rgba(255,255,255,.08); color:rgba(255,255,255,.7); border:1px solid rgba(255,255,255,.15);}
+
+  .aqua-chips{display:flex; gap:8px; margin-bottom:14px;}
+  .aqua-chip{flex:1; text-align:center; padding:8px 0; border-radius:14px; font-size:12px; font-weight:700; background:rgba(255,255,255,.06); color:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.1);}
+  .aqua-chip.active{background:linear-gradient(135deg,#38bdf8,#0ea5e9); color:#04263a; border-color:transparent;}
+  .aqua-statrow{display:flex; gap:10px; margin-bottom:14px;}
+  .aqua-stat{flex:1; background:rgba(255,255,255,.06); border-radius:14px; padding:12px; text-align:center;}
+  .aqua-stat .v{color:#fff; font-size:18px; font-weight:800;}
+  .aqua-stat .k{color:rgba(255,255,255,.55); font-size:9px; margin-top:3px; letter-spacing:.4px;}
+  .aqua-runrow{display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid rgba(255,255,255,.08);}
+  .aqua-runrow:first-of-type{border-top:none;}
+  .aqua-dot2{width:8px; height:8px; border-radius:50%; background:#38bdf8;}
+  .aqua-runtxt{color:#fff; font-size:12.5px; font-weight:600; flex:1;}
+  .aqua-rundur{color:#7dd3fc; font-size:12.5px; font-weight:800;}
+
+  /* ============================================================= */
+  /* DIRECTION B — "Command Deck": dark technical, sidebar nav      */
+  /* ============================================================= */
+  .cmd-shell{display:flex; background:#0b0e12; min-height:560px;}
+  .cmd-sidebar{
+    width:64px; background:#080a0d; border-right:1px solid #1c2128; padding:16px 0;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .cmd-sidebar .logo{color:#00e5c7; font-size:20px; margin-bottom:14px;}
+  .cmd-navicon{
+    width:38px; height:38px; border-radius:8px; display:flex; align-items:center; justify-content:center;
+    color:#5a6472; font-size:16px; margin-bottom:4px;
+  }
+  .cmd-navicon.active{background:rgba(0,229,199,.12); color:#00e5c7; border:1px solid rgba(0,229,199,.35);}
+  .cmd-main{flex:1; padding:18px 20px;}
+  .cmd-topbar{display:flex; align-items:center; margin-bottom:16px;}
+  .cmd-title{color:#fff; font-size:15px; font-weight:800; letter-spacing:.3px; font-family:'Consolas',monospace;}
+  .cmd-topbar .spacer{flex:1;}
+  .cmd-status{
+    display:flex; align-items:center; gap:6px; background:#101418; border:1px solid #1c2128;
+    padding:5px 12px; border-radius:6px; color:#00e5c7; font-size:11px; font-weight:700; font-family:monospace;
+  }
+  .cmd-status i{width:7px; height:7px; background:#00e5c7; border-radius:50%; box-shadow:0 0 6px #00e5c7;}
+  .cmd-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px;}
+  .cmd-cell{background:#101418; border:1px solid #1c2128; border-radius:6px; padding:10px; text-align:center;}
+  .cmd-cell .k{color:#5a6472; font-size:9px; font-family:monospace; text-transform:uppercase; letter-spacing:.5px;}
+  .cmd-cell .v{color:#fff; font-size:15px; font-weight:800; font-family:'Consolas',monospace; margin-top:4px;}
+  .cmd-cell.warn .v{color:#ffb020;}
+  .cmd-cell.ok .v{color:#00e5c7;}
+  .cmd-panel{background:#101418; border:1px solid #1c2128; border-radius:8px; padding:14px; margin-bottom:10px;}
+  .cmd-panelhdr{color:#5a6472; font-size:10px; font-weight:700; font-family:monospace; text-transform:uppercase; letter-spacing:.6px; margin-bottom:10px; display:flex; justify-content:space-between;}
+  .cmd-motorrow{display:flex; align-items:center; gap:12px;}
+  .cmd-bar{flex:1; height:8px; background:#1c2128; border-radius:4px; overflow:hidden;}
+  .cmd-bar i{display:block; height:100%; background:linear-gradient(90deg,#00e5c7,#00b8a3);}
+  .cmd-pct{color:#fff; font-family:monospace; font-size:12px; width:38px; text-align:right;}
+  .cmd-motorbtn{padding:6px 14px; border-radius:5px; border:1px solid #00e5c7; background:transparent; color:#00e5c7; font-family:monospace; font-size:10.5px; font-weight:700;}
+  .cmd-logline{color:#7d8a99; font-size:10.5px; font-family:'Consolas',monospace; padding:3px 0; border-bottom:1px dashed #1c2128;}
+  .cmd-logline .t{color:#3d4652;}
+  .cmd-logline .ev{color:#00e5c7;}
+
+  /* ============================================================= */
+  /* DIRECTION C — "Minimal Paper": light, calm, editorial          */
+  /* ============================================================= */
+  .paper-page{background:#faf7f2; padding:24px; min-height:560px;}
+  .paper-nav{display:flex; align-items:center; margin-bottom:20px;}
+  .paper-brand{color:#2b2419; font-size:19px; font-weight:800; font-family:Georgia,serif; display:flex; align-items:center; gap:8px;}
+  .paper-nav .spacer{flex:1;}
+  .paper-navlink{color:#8a7f6e; font-size:12.5px; font-weight:600; padding:5px 12px; margin-left:2px;}
+  .paper-navlink.active{color:#2b2419; border-bottom:2px solid #d97757;}
+  .paper-live{color:#4d8b6f; font-size:11.5px; font-weight:700; display:flex; align-items:center; gap:5px;}
+  .paper-live i{width:6px; height:6px; border-radius:50%; background:#4d8b6f;}
+
+  .paper-row{display:flex; gap:16px; margin-bottom:16px;}
+  .paper-card{
+    flex:1; background:#fffdfa; border:1px solid #ece5d8; border-radius:18px; padding:18px;
+    box-shadow:0 4px 16px rgba(120,100,70,.06); text-align:center;
+  }
+  .paper-lbl{color:#a89a82; font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;}
+  .paper-tankicon{
+    width:70px; height:88px; margin:12px auto 10px; border-radius:16px 16px 22px 22px;
+    border:2.5px solid #d97757; position:relative; overflow:hidden; background:#fff8f0;
+  }
+  .paper-tankicon .fill{position:absolute; left:0; right:0; bottom:0; background:#f0b090;}
+  .paper-state{color:#2b2419; font-size:22px; font-weight:800; font-family:Georgia,serif;}
+  .paper-pct{color:#a89a82; font-size:12px; margin-top:2px; margin-bottom:12px;}
+  .paper-btn{padding:9px 22px; border-radius:12px; border:none; font-weight:700; font-size:12.5px; cursor:pointer;}
+  .paper-btn.on{background:#4d8b6f; color:#fff;}
+  .paper-btn.off{background:#f0ece2; color:#8a7f6e;}
+
+  .paper-card2{background:#fffdfa; border:1px solid #ece5d8; border-radius:18px; padding:18px; box-shadow:0 4px 16px rgba(120,100,70,.06); margin-bottom:14px;}
+  .paper-cardtitle{color:#2b2419; font-size:14px; font-weight:800; font-family:Georgia,serif; margin-bottom:12px;}
+  .paper-chips{display:flex; gap:8px; margin-bottom:14px;}
+  .paper-chip{flex:1; text-align:center; padding:7px 0; border-radius:20px; font-size:11.5px; font-weight:700; background:#f4efe6; color:#8a7f6e;}
+  .paper-chip.active{background:#d97757; color:#fff;}
+  .paper-runrow{display:flex; align-items:center; gap:10px; padding:10px 0; border-top:1px solid #f0ece2;}
+  .paper-runrow:first-of-type{border-top:none;}
+  .paper-tag{padding:2px 8px; border-radius:8px; font-size:10px; font-weight:700; background:#fbe8dd; color:#d97757;}
+  .paper-runtxt{color:#2b2419; font-size:12.5px; flex:1; font-weight:600;}
+  .paper-rundur{color:#4d8b6f; font-size:12.5px; font-weight:800;}
+</style>
+</head>
+<body>
+
+<div class="sectionhdr"><span class="tag">DIRECTION A</span></div>
+
+<!-- ============ A1: Aqua Glass — Dashboard ============ -->
+<div class="col">
+  <h3>Direction A · "Aqua Glass"</h3>
+  <h2>Dashboard — gradient background, frosted glass cards</h2>
+  <p class="desc">A completely different visual language from today's flat Ant Design cards: deep-water gradient backdrop, glowing cyan accents, glass-blur panels, circular "orb" tank gauges, and a floating pill nav bar replacing the plain header.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="aqua-page">
+      <div class="aqua-nav">
+        <div class="aqua-brand">💧 Tank Monitor</div>
+        <div class="aqua-navlink active">Dashboard</div>
+        <div class="aqua-navlink">History</div>
+        <div class="aqua-navlink">Settings</div>
+        <div class="aqua-navlink">System</div>
+        <div class="spacer"></div>
+        <div class="aqua-live"><i></i>Live</div>
+      </div>
+      <div class="aqua-glass">
+        <div class="aqua-row">
+          <div class="aqua-tank">
+            <div class="lbl">Overhead</div>
+            <div class="aqua-orb" style="--p:100%"><span>100%</span></div>
+            <div class="aqua-state">FULL</div>
+            <div class="aqua-btnrow"><button class="aqua-btn on">Power On</button><button class="aqua-btn off">Off</button></div>
+          </div>
+          <div class="aqua-tank">
+            <div class="lbl">Underground</div>
+            <div class="aqua-orb" style="--p:100%"><span>100%</span></div>
+            <div class="aqua-state">FULL</div>
+            <div class="aqua-btnrow"><button class="aqua-btn on">Power On</button><button class="aqua-btn off">Off</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ A2: Aqua Glass — History ============ -->
+<div class="col">
+  <h3>Direction A · "Aqua Glass"</h3>
+  <h2>History — same glass system, glowing period chips</h2>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="aqua-page">
+      <div class="aqua-nav">
+        <div class="aqua-brand">💧 Tank Monitor</div>
+        <div class="aqua-navlink">Dashboard</div>
+        <div class="aqua-navlink active">History</div>
+        <div class="aqua-navlink">Settings</div>
+        <div class="aqua-navlink">System</div>
+        <div class="spacer"></div>
+        <div class="aqua-live"><i></i>Live</div>
+      </div>
+      <div class="aqua-glass">
+        <div class="aqua-chips">
+          <div class="aqua-chip active">Today</div><div class="aqua-chip">Week</div><div class="aqua-chip">Month</div><div class="aqua-chip">Year</div>
+        </div>
+        <div class="aqua-statrow">
+          <div class="aqua-stat"><div class="v">5</div><div class="k">RUNS TODAY</div></div>
+          <div class="aqua-stat"><div class="v">52m</div><div class="k">TOTAL OH RUN</div></div>
+          <div class="aqua-stat"><div class="v">15m</div><div class="k">TOTAL UG RUN</div></div>
+        </div>
+        <div class="aqua-runrow"><div class="aqua-dot2"></div><div class="aqua-runtxt">OH 6:02 AM → 6:18 AM · Auto</div><div class="aqua-rundur">16m</div></div>
+        <div class="aqua-runrow"><div class="aqua-dot2"></div><div class="aqua-runtxt">UG 9:40 PM → 9:55 PM · Manual · App</div><div class="aqua-rundur">15m</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+<div class="sectionhdr"><span class="tag">DIRECTION B</span></div>
+
+<!-- ============ B1: Command Deck — Dashboard ============ -->
+<div class="col">
+  <h3>Direction B · "Command Deck"</h3>
+  <h2>Dashboard — sidebar nav, monospace data readouts</h2>
+  <p class="desc">Breaks from the single scrolling page entirely: a left icon sidebar for navigation (Dashboard/History/Settings/System/Logs), sharp-cornered monitoring panels, monospace figures — built for a wall display or power users who want density over decoration.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="cmd-shell">
+      <div class="cmd-sidebar">
+        <div class="logo">💧</div>
+        <div class="cmd-navicon active">▦</div>
+        <div class="cmd-navicon">⏱</div>
+        <div class="cmd-navicon">⚙</div>
+        <div class="cmd-navicon">◈</div>
+        <div class="cmd-navicon">▤</div>
+      </div>
+      <div class="cmd-main">
+        <div class="cmd-topbar">
+          <div class="cmd-title">TANK_MONITOR // DASHBOARD</div>
+          <div class="spacer"></div>
+          <div class="cmd-status"><i></i>LIVE</div>
+        </div>
+        <div class="cmd-grid">
+          <div class="cmd-cell ok"><div class="k">OH State</div><div class="v">FULL</div></div>
+          <div class="cmd-cell ok"><div class="k">UG State</div><div class="v">FULL</div></div>
+          <div class="cmd-cell"><div class="k">WiFi</div><div class="v">-52dBm</div></div>
+          <div class="cmd-cell ok"><div class="k">LoRa</div><div class="v">OK</div></div>
+        </div>
+        <div class="cmd-panel">
+          <div class="cmd-panelhdr"><span>OH_MOTOR</span><span>OFF</span></div>
+          <div class="cmd-motorrow">
+            <div class="cmd-bar"><i style="width:100%"></i></div>
+            <div class="cmd-pct">100%</div>
+            <button class="cmd-motorbtn">START</button>
+          </div>
+        </div>
+        <div class="cmd-panel">
+          <div class="cmd-panelhdr"><span>UG_MOTOR</span><span>OFF</span></div>
+          <div class="cmd-motorrow">
+            <div class="cmd-bar"><i style="width:100%"></i></div>
+            <div class="cmd-pct">100%</div>
+            <button class="cmd-motorbtn">START</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ B2: Command Deck — History/Logs ============ -->
+<div class="col">
+  <h3>Direction B · "Command Deck"</h3>
+  <h2>History — terminal-style event log</h2>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="cmd-shell">
+      <div class="cmd-sidebar">
+        <div class="logo">💧</div>
+        <div class="cmd-navicon">▦</div>
+        <div class="cmd-navicon active">⏱</div>
+        <div class="cmd-navicon">⚙</div>
+        <div class="cmd-navicon">◈</div>
+        <div class="cmd-navicon">▤</div>
+      </div>
+      <div class="cmd-main">
+        <div class="cmd-topbar">
+          <div class="cmd-title">TANK_MONITOR // HISTORY</div>
+          <div class="spacer"></div>
+          <div class="cmd-status"><i></i>TODAY</div>
+        </div>
+        <div class="cmd-grid">
+          <div class="cmd-cell"><div class="k">Runs</div><div class="v">5</div></div>
+          <div class="cmd-cell ok"><div class="k">OH Total</div><div class="v">52m</div></div>
+          <div class="cmd-cell ok"><div class="k">UG Total</div><div class="v">15m</div></div>
+          <div class="cmd-cell warn"><div class="k">Water Est.</div><div class="v">520L</div></div>
+        </div>
+        <div class="cmd-panel">
+          <div class="cmd-panelhdr"><span>EVENT_LOG</span><span>TAIL -f</span></div>
+          <div class="cmd-logline"><span class="t">[06:02:14]</span> <span class="ev">OH_ON</span> reason=auto</div>
+          <div class="cmd-logline"><span class="t">[06:18:03]</span> <span class="ev">OH_OFF</span> dur=16m</div>
+          <div class="cmd-logline"><span class="t">[21:40:51]</span> <span class="ev">UG_ON</span> reason=manual:app</div>
+          <div class="cmd-logline"><span class="t">[21:55:22]</span> <span class="ev">UG_OFF</span> dur=15m</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+<div class="sectionhdr"><span class="tag">DIRECTION C</span></div>
+
+<!-- ============ C1: Minimal Paper — Dashboard ============ -->
+<div class="col">
+  <h3>Direction C · "Minimal Paper"</h3>
+  <h2>Dashboard — warm light theme, editorial serif headings</h2>
+  <p class="desc">The calmest, most un-technical direction: warm paper-white background, soft rounded cards with barely-there shadows (no hard borders), a serif display font for headings, and muted terracotta/sage accents instead of saturated blue/green.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="paper-page">
+      <div class="paper-nav">
+        <div class="paper-brand">💧 Tank Monitor</div>
+        <div class="paper-navlink active">Dashboard</div>
+        <div class="paper-navlink">History</div>
+        <div class="paper-navlink">Settings</div>
+        <div class="paper-navlink">System</div>
+        <div class="spacer"></div>
+        <div class="paper-live"><i></i>Live</div>
+      </div>
+      <div class="paper-row">
+        <div class="paper-card">
+          <div class="paper-lbl">Overhead</div>
+          <div class="paper-tankicon"><div class="fill" style="height:100%"></div></div>
+          <div class="paper-state">Full</div>
+          <div class="paper-pct">100% full · Motor off</div>
+          <button class="paper-btn on">Power On</button>
+        </div>
+        <div class="paper-card">
+          <div class="paper-lbl">Underground</div>
+          <div class="paper-tankicon"><div class="fill" style="height:100%"></div></div>
+          <div class="paper-state">Full</div>
+          <div class="paper-pct">100% full · Motor off</div>
+          <button class="paper-btn on">Power On</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ C2: Minimal Paper — History ============ -->
+<div class="col">
+  <h3>Direction C · "Minimal Paper"</h3>
+  <h2>History — calm list view, soft dividers</h2>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="paper-page">
+      <div class="paper-nav">
+        <div class="paper-brand">💧 Tank Monitor</div>
+        <div class="paper-navlink">Dashboard</div>
+        <div class="paper-navlink active">History</div>
+        <div class="paper-navlink">Settings</div>
+        <div class="paper-navlink">System</div>
+        <div class="spacer"></div>
+        <div class="paper-live"><i></i>Live</div>
+      </div>
+      <div class="paper-card2">
+        <div class="paper-cardtitle">Today</div>
+        <div class="paper-chips">
+          <div class="paper-chip active">Today</div><div class="paper-chip">Week</div><div class="paper-chip">Month</div><div class="paper-chip">Year</div>
+        </div>
+        <div class="paper-runrow"><span class="paper-tag">OH</span><span class="paper-runtxt">6:02 AM → 6:18 AM · Auto</span><span class="paper-rundur">16m</span></div>
+        <div class="paper-runrow"><span class="paper-tag">UG</span><span class="paper-runtxt">9:40 PM → 9:55 PM · Manual · App</span><span class="paper-rundur">15m</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

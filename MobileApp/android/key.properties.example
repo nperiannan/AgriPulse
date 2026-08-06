@@ -1,0 +1,13 @@
+# Copy this file to `key.properties` (same folder) and fill in your values.
+# `key.properties` is gitignored and must NEVER be committed or shared.
+#
+# Generate the keystore once with:
+#   keytool -genkeypair -v -keystore C:\src\tankmonitor-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias tankmonitor
+#
+# storeFile points at that .jks file (use forward slashes or double backslashes).
+
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=tankmonitor
+storeFile=C:/src/tankmonitor-release.jks

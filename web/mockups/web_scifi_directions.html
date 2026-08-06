@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web App — Sci-Fi redesign concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{
+    background:#050507; margin:0; padding:32px; font-family:'Rajdhani',Arial,sans-serif;
+    display:flex; gap:40px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+  }
+  .col{display:flex; flex-direction:column; align-items:center; gap:10px; max-width:420px;}
+  .col h2{color:#fff; font-size:16px; font-weight:800; margin:0; text-align:center; font-family:'Rajdhani';}
+  .col h3{color:#7a8a9a; font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin:0 0 -4px;}
+  .col p.desc{color:#8a99a8; font-size:12.5px; max-width:400px; text-align:center; margin:0 0 6px; line-height:1.55;}
+  .phone{
+    width:390px; border-radius:34px; overflow:hidden; box-shadow:0 24px 70px rgba(0,0,0,.8);
+    border:6px solid #1a1a1e;
+  }
+  .notch{background:#000; height:22px; display:flex; align-items:center; justify-content:center;}
+  .notch::before{content:""; width:90px; height:12px; background:#111; border-radius:8px;}
+  .divider{width:100%; max-width:1600px; height:1px; background:#1c1c22; margin:20px 0;}
+  .sectionhdr{width:100%; text-align:center; margin-bottom:6px;}
+  .sectionhdr .tag{
+    display:inline-block; background:#0d1116; border:1px solid #1e2a33; color:#5eead4; padding:6px 18px;
+    border-radius:4px; font-size:12px; font-weight:800; letter-spacing:1.5px; font-family:'Share Tech Mono',monospace;
+  }
+
+  /* ============================================================= */
+  /* SCIFI 1 — "HUD Command": cyan/teal, angular panels, scanlines  */
+  /* ============================================================= */
+  .hud-page{
+    background:
+      linear-gradient(rgba(4,14,16,.94),rgba(4,14,16,.97)),
+      repeating-linear-gradient(0deg, rgba(94,234,212,.035) 0px, rgba(94,234,212,.035) 1px, transparent 1px, transparent 3px);
+    padding:18px 14px; min-height:640px; font-family:'Rajdhani',sans-serif; position:relative;
+  }
+  .hud-scan{position:absolute; inset:0; pointer-events:none; background:linear-gradient(180deg,transparent,rgba(94,234,212,.05) 50%,transparent); opacity:.5;}
+  .hud-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .hud-brand{color:#5eead4; font-family:'Orbitron'; font-size:13px; font-weight:700; letter-spacing:1.5px; display:flex; align-items:center; gap:7px; text-shadow:0 0 12px rgba(94,234,212,.6);}
+  .hud-brand .ico{width:8px; height:8px; background:#5eead4; box-shadow:0 0 10px #5eead4; clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);}
+  .hud-status{display:flex; align-items:center; gap:5px; color:#5eead4; font-size:9.5px; font-weight:700; font-family:'Share Tech Mono'; letter-spacing:.5px;}
+  .hud-status i{width:6px; height:6px; background:#5eead4; box-shadow:0 0 8px #5eead4; animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+  .hud-navbar{display:flex; gap:2px; background:#081418; border:1px solid #163038; padding:3px; margin-bottom:14px; clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px);}
+  .hud-navbar span{flex:1; text-align:center; padding:7px 4px; font-size:10px; font-weight:700; letter-spacing:1px; color:#4a7a80; text-transform:uppercase; font-family:'Share Tech Mono';}
+  .hud-navbar span.active{background:#5eead4; color:#04191a; clip-path:polygon(4px 0,100% 0,100% 100%,0 100%,0 4px);}
+
+  .hud-panel{
+    background:rgba(8,22,25,.85); border:1px solid #1c3b42; padding:16px; margin-bottom:12px; position:relative;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+  }
+  .hud-panel::before{content:""; position:absolute; top:0; left:0; width:22px; height:2px; background:#5eead4; box-shadow:0 0 8px #5eead4;}
+  .hud-panel-lbl{color:#5a8a90; font-size:9.5px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; font-family:'Share Tech Mono'; margin-bottom:10px;}
+
+  .hud-tankrow{display:flex; align-items:center; gap:14px; padding:10px 0;}
+  .hud-tankrow + .hud-tankrow{border-top:1px solid #12282d; margin-top:4px; padding-top:14px;}
+  .hud-ring{width:58px; height:58px; border-radius:50%; position:relative; flex-shrink:0; background:conic-gradient(#5eead4 0% var(--p,72%), #10262a var(--p,72%) 100%);}
+  .hud-ring::before{content:""; position:absolute; inset:5px; border-radius:50%; background:#071518; box-shadow:inset 0 0 14px rgba(94,234,212,.15);}
+  .hud-ring span{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#5eead4; font-size:11px; font-weight:800; font-family:'Share Tech Mono';}
+  .hud-tankname{color:#e8f7f5; font-size:14px; font-weight:700; font-family:'Rajdhani';}
+  .hud-tanksub{color:#5a8a90; font-size:10.5px; font-family:'Share Tech Mono'; margin-top:2px;}
+  .hud-btn{
+    padding:7px 14px; font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+    background:transparent; border:1px solid #5eead4; color:#5eead4; font-family:'Share Tech Mono';
+    clip-path:polygon(6px 0,100% 0,100% 100%,0 100%,0 6px);
+  }
+  .hud-btn.off{border-color:#ff6b6b; color:#ff6b6b;}
+
+  .hud-stats{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .hud-statval{color:#e8f7f5; font-size:20px; font-weight:800; font-family:'Orbitron'; margin-top:6px;}
+  .hud-statsub{color:#4a7a80; font-size:9.5px; margin-top:3px; font-family:'Share Tech Mono';}
+
+  /* ============================================================= */
+  /* SCIFI 2 — "Quantum Core": blue holographic glass + orbit ring */
+  /* ============================================================= */
+  .qc-page{
+    background:radial-gradient(ellipse at 50% -10%, rgba(56,120,255,.16), transparent 60%), #04060d;
+    padding:18px 14px; min-height:640px; font-family:'Rajdhani',sans-serif;
+  }
+  .qc-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;}
+  .qc-brand{color:#fff; font-family:'Orbitron'; font-size:12.5px; font-weight:700; letter-spacing:1px; display:flex; align-items:center; gap:8px;}
+  .qc-brand .ico{width:20px; height:20px; border-radius:50%; border:2px solid #4d8dff; box-shadow:0 0 14px rgba(77,141,255,.7);}
+  .qc-navpill{display:flex; gap:2px; background:rgba(255,255,255,.03); border:1px solid rgba(77,141,255,.25); border-radius:20px; padding:3px;}
+  .qc-navpill span{padding:6px 11px; border-radius:16px; font-size:9.5px; font-weight:700; color:#5a6a85; letter-spacing:.5px; text-transform:uppercase;}
+  .qc-navpill span.active{background:linear-gradient(135deg,#4d8dff,#8b5cf6); color:#fff; box-shadow:0 0 14px rgba(77,141,255,.5);}
+
+  .qc-hero{
+    background:linear-gradient(160deg,rgba(77,141,255,.08),rgba(139,92,246,.04));
+    border:1px solid rgba(77,141,255,.28); border-radius:22px; padding:22px; margin-bottom:12px; text-align:center; position:relative; overflow:hidden;
+  }
+  .qc-hero::before{content:""; position:absolute; inset:0; background:repeating-linear-gradient(90deg,rgba(77,141,255,.04) 0 1px,transparent 1px 40px), repeating-linear-gradient(0deg,rgba(77,141,255,.04) 0 1px,transparent 1px 40px);}
+  .qc-orbit{width:150px; height:150px; margin:0 auto 14px; border-radius:50%; position:relative; background:conic-gradient(#4d8dff 0% 62%, rgba(255,255,255,.06) 62% 100%); z-index:1;}
+  .qc-orbit::before{content:""; position:absolute; inset:14px; border-radius:50%; background:#04060d; border:1px solid rgba(77,141,255,.3);}
+  .qc-orbit::after{content:""; position:absolute; inset:-8px; border-radius:50%; border:1px dashed rgba(77,141,255,.25); animation:spin 18s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .qc-orbitval{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:2;}
+  .qc-orbitval b{color:#fff; font-size:26px; font-weight:800; font-family:'Orbitron';}
+  .qc-orbitval span{color:#6d84a8; font-size:10px; letter-spacing:1px; margin-top:2px; text-transform:uppercase;}
+  .qc-tankname{color:#fff; font-size:15px; font-weight:700; position:relative; z-index:1;}
+  .qc-tankmeta{color:#6d84a8; font-size:11px; margin-top:3px; position:relative; z-index:1;}
+
+  .qc-card{background:rgba(255,255,255,.025); border:1px solid rgba(77,141,255,.18); border-radius:18px; padding:16px; margin-bottom:10px;}
+  .qc-cardlbl{color:#6d84a8; font-size:10px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase;}
+  .qc-row{display:flex; align-items:center; gap:12px; padding:9px 0;}
+  .qc-row + .qc-row{border-top:1px solid rgba(77,141,255,.12);}
+  .qc-miniring{width:40px; height:40px; border-radius:50%; background:conic-gradient(#8b5cf6 0% 45%, rgba(255,255,255,.06) 45% 100%); position:relative; flex-shrink:0;}
+  .qc-miniring::before{content:""; position:absolute; inset:4px; border-radius:50%; background:#04060d;}
+  .qc-btn{
+    padding:7px 16px; border-radius:20px; font-size:10.5px; font-weight:700; border:none; color:#fff;
+    background:linear-gradient(135deg,#4d8dff,#8b5cf6); box-shadow:0 0 14px rgba(77,141,255,.4);
+  }
+  .qc-stats{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .qc-statval{color:#fff; font-size:19px; font-weight:800; font-family:'Orbitron'; margin-top:4px;}
+
+  /* ============================================================= */
+  /* SCIFI 3 — "Cyberdeck": magenta/violet neon, glitch accents    */
+  /* ============================================================= */
+  .cy-page{background:#08040d; padding:18px 14px; min-height:640px; font-family:'Rajdhani',sans-serif; position:relative; overflow:hidden;}
+  .cy-page::before{content:""; position:absolute; inset:0; background-image:radial-gradient(rgba(217,70,239,.08) 1px, transparent 1px); background-size:18px 18px; pointer-events:none;}
+  .cy-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; position:relative; z-index:1;}
+  .cy-brand{color:#f0abfc; font-family:'Orbitron'; font-size:12.5px; font-weight:700; letter-spacing:1px; text-shadow:0 0 10px rgba(217,70,239,.7);}
+  .cy-live{color:#f0abfc; font-size:9px; font-family:'Share Tech Mono'; letter-spacing:1px;}
+  .cy-navbar{display:flex; gap:6px; margin-bottom:14px; position:relative; z-index:1;}
+  .cy-navbar span{flex:1; text-align:center; padding:7px 4px; font-size:9.5px; font-weight:700; letter-spacing:.8px; color:#8a6a95; text-transform:uppercase; border:1px solid #2a1a35; font-family:'Share Tech Mono';}
+  .cy-navbar span.active{color:#08040d; background:#d946ef; border-color:#d946ef; box-shadow:0 0 16px rgba(217,70,239,.6);}
+
+  .cy-hero{
+    background:linear-gradient(160deg,#170b22,#0d0612); border:1px solid #3a1e4a; border-radius:4px; padding:18px; margin-bottom:12px; position:relative; z-index:1;
+    clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px));
+  }
+  .cy-herolbl{color:#d946ef; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; font-family:'Share Tech Mono'; margin-bottom:12px;}
+  .cy-tankrow{display:flex; align-items:center; gap:14px; padding:8px 0;}
+  .cy-tankrow + .cy-tankrow{border-top:1px solid #2a1a35; margin-top:6px; padding-top:14px;}
+  .cy-bar{width:6px; height:56px; background:#1e1027; border-radius:3px; position:relative; overflow:hidden; flex-shrink:0;}
+  .cy-bar i{position:absolute; bottom:0; left:0; width:100%; background:linear-gradient(180deg,#f0abfc,#d946ef); box-shadow:0 0 10px #d946ef;}
+  .cy-tankname{color:#fce7fc; font-size:14px; font-weight:700;}
+  .cy-tanksub{color:#8a6a95; font-size:10.5px; font-family:'Share Tech Mono'; margin-top:2px;}
+  .cy-btn{padding:7px 14px; font-size:10px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; background:#d946ef; color:#08040d; border:none; border-radius:2px; font-family:'Share Tech Mono';}
+  .cy-btn.off{background:transparent; border:1px solid #ff6b9d; color:#ff6b9d;}
+  .cy-stats{display:grid; grid-template-columns:1fr 1fr; gap:10px; position:relative; z-index:1;}
+  .cy-card{background:#120a1a; border:1px solid #2a1a35; border-radius:4px; padding:14px;}
+  .cy-cardlbl{color:#8a6a95; font-size:9.5px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; font-family:'Share Tech Mono';}
+  .cy-statval{color:#fce7fc; font-size:19px; font-weight:800; font-family:'Orbitron'; margin-top:6px;}
+</style>
+</head>
+<body>
+
+  <div class="sectionhdr"><span class="tag">◈ SCI-FI DIRECTION CONCEPTS — mobile-first, centered, max-width ~420px on desktop too ◈</span></div>
+
+  <!-- ============================= OPTION 1: HUD COMMAND ============================= -->
+  <div class="col">
+    <h3>Option 1</h3>
+    <h2>HUD Command</h2>
+    <p class="desc">Military heads-up-display aesthetic. Angular clipped-corner panels, teal/cyan glow, scanline texture, monospace telemetry readouts. Feels like piloting a vehicle console.</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="hud-page">
+        <div class="hud-scan"></div>
+        <div class="hud-top">
+          <div class="hud-brand"><span class="ico"></span>TANK//MONITOR</div>
+          <div class="hud-status"><i></i>LIVE</div>
+        </div>
+        <div class="hud-navbar">
+          <span class="active">Dash</span><span>History</span><span>Config</span><span>Sys</span>
+        </div>
+        <div class="hud-panel">
+          <div class="hud-panel-lbl">// Tank Levels</div>
+          <div class="hud-tankrow">
+            <div class="hud-ring" style="--p:72%"><span>72%</span></div>
+            <div style="flex:1">
+              <div class="hud-tankname">OVERHEAD</div>
+              <div class="hud-tanksub">HALF · MOTOR OFF</div>
+            </div>
+            <button class="hud-btn">PWR ON</button>
+          </div>
+          <div class="hud-tankrow">
+            <div class="hud-ring" style="--p:38%"><span>38%</span></div>
+            <div style="flex:1">
+              <div class="hud-tankname">UNDERGROUND</div>
+              <div class="hud-tanksub">LOW · MOTOR ON</div>
+            </div>
+            <button class="hud-btn off">PWR OFF</button>
+          </div>
+        </div>
+        <div class="hud-stats">
+          <div class="hud-panel" style="margin-bottom:0;">
+            <div class="hud-panel-lbl">System</div>
+            <div class="hud-statval" style="color:#5eead4;">NOMINAL</div>
+            <div class="hud-statsub">LORA OK · WIFI -61dBm</div>
+          </div>
+          <div class="hud-panel" style="margin-bottom:0;">
+            <div class="hud-panel-lbl">Uptime</div>
+            <div class="hud-statval">14D 06H</div>
+            <div class="hud-statsub">FW v2.10.0</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= OPTION 2: QUANTUM CORE ============================= -->
+  <div class="col">
+    <h3>Option 2</h3>
+    <h2>Quantum Core</h2>
+    <p class="desc">Holographic glass with a glowing orbital ring as the hero focal point. Blue→violet gradient, soft grid overlay, rounded glass cards. Reads as premium sci-fi rather than tactical.</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="qc-page">
+        <div class="qc-top">
+          <div class="qc-brand"><span class="ico"></span>TANK MONITOR</div>
+          <div class="qc-navpill">
+            <span class="active">Dash</span><span>Hist</span><span>Cfg</span><span>Sys</span>
+          </div>
+        </div>
+        <div class="qc-hero">
+          <div class="qc-orbit">
+            <div class="qc-orbitval"><b>72%</b><span>Overhead</span></div>
+          </div>
+          <div class="qc-tankname">Overhead Tank · HALF</div>
+          <div class="qc-tankmeta">Motor OFF — tap below to activate</div>
+        </div>
+        <div class="qc-card">
+          <div class="qc-cardlbl" style="margin-bottom:8px;">Underground Tank</div>
+          <div class="qc-row">
+            <div class="qc-miniring"></div>
+            <div style="flex:1">
+              <div style="color:#fff; font-size:13px; font-weight:700;">38% · LOW</div>
+              <div style="color:#6d84a8; font-size:10.5px;">Motor running</div>
+            </div>
+            <button class="qc-btn">Power Off</button>
+          </div>
+        </div>
+        <div class="qc-stats">
+          <div class="qc-card">
+            <div class="qc-cardlbl">System</div>
+            <div class="qc-statval" style="color:#4ade80;">Online</div>
+          </div>
+          <div class="qc-card">
+            <div class="qc-cardlbl">Uptime</div>
+            <div class="qc-statval">14d 6h</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================= OPTION 3: CYBERDECK ============================= -->
+  <div class="col">
+    <h3>Option 3</h3>
+    <h2>Cyberdeck</h2>
+    <p class="desc">Cyberpunk terminal — magenta/violet neon on near-black, dot-matrix background, faceted corner-cut panels, vertical level bars instead of rings. Bold, high-contrast, gritty.</p>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="cy-page">
+        <div class="cy-top">
+          <div class="cy-brand">TANK_MONITOR.SYS</div>
+          <div class="cy-live">● LIVE</div>
+        </div>
+        <div class="cy-navbar">
+          <span class="active">DASH</span><span>HIST</span><span>CFG</span><span>SYS</span>
+        </div>
+        <div class="cy-hero">
+          <div class="cy-herolbl">▚ Tank Levels</div>
+          <div class="cy-tankrow">
+            <div class="cy-bar"><i style="height:72%"></i></div>
+            <div style="flex:1">
+              <div class="cy-tankname">OVERHEAD</div>
+              <div class="cy-tanksub">72% · HALF · MOTOR OFF</div>
+            </div>
+            <button class="cy-btn">ON</button>
+          </div>
+          <div class="cy-tankrow">
+            <div class="cy-bar"><i style="height:38%"></i></div>
+            <div style="flex:1">
+              <div class="cy-tankname">UNDERGROUND</div>
+              <div class="cy-tanksub">38% · LOW · MOTOR ON</div>
+            </div>
+            <button class="cy-btn off">OFF</button>
+          </div>
+        </div>
+        <div class="cy-stats">
+          <div class="cy-card">
+            <div class="cy-cardlbl">System</div>
+            <div class="cy-statval" style="color:#4ade80;">NOMINAL</div>
+          </div>
+          <div class="cy-card">
+            <div class="cy-cardlbl">Uptime</div>
+            <div class="cy-statval">14D 6H</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

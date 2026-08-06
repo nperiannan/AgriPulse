@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web App Mockups — current features + Nova/Clean/Console themes (not yet in web)</title>
+<style>
+  :root{
+    --bg:#141414; --card:#1f1f1f; --bd:#303030; --lbl:#8c8c8c; --txt:#ffffff;
+    --blue:#1890ff; --green:#52c41a; --orange:#fa8c16; --red:#ff4d4f; --purple:#9254de;
+  }
+  *{box-sizing:border-box;}
+  body{
+    background:#0a0a0a; margin:0; padding:32px; font-family:'Segoe UI',Roboto,Arial,sans-serif;
+    display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+  }
+  .col{display:flex; flex-direction:column; align-items:center; gap:10px; max-width:640px;}
+  .col h2{color:#fff; font-size:15px; font-weight:700; margin:0; text-align:center;}
+  .badge{
+    display:inline-block; padding:2px 9px; border-radius:20px; font-size:10px; font-weight:700;
+    letter-spacing:.3px; margin-bottom:2px;
+  }
+  .badge.existing{background:rgba(82,196,26,.15); color:var(--green); border:1px solid rgba(82,196,26,.4);}
+  .badge.new{background:rgba(24,144,255,.15); color:var(--blue); border:1px solid rgba(24,144,255,.4);}
+  .col p.desc{color:#aab; font-size:12px; max-width:600px; text-align:center; margin:0 0 6px;}
+
+  .browser{
+    width:620px; background:var(--bg); border-radius:10px; border:1px solid #2a2a2a;
+    overflow:hidden; box-shadow:0 16px 40px rgba(0,0,0,.6);
+  }
+  .chrome{
+    background:#0f0f0f; padding:8px 12px; display:flex; align-items:center; gap:6px;
+    border-bottom:1px solid #262626;
+  }
+  .chrome .dot{width:9px; height:9px; border-radius:50%;}
+  .chrome .dot.r{background:#ff5f56;} .chrome .dot.y{background:#ffbd2e;} .chrome .dot.g{background:#27c93f;}
+  .chrome .url{
+    flex:1; margin-left:8px; background:#1c1c1c; border-radius:6px; padding:3px 10px;
+    color:#666; font-size:10.5px; font-family:monospace;
+  }
+  .page{padding:16px;}
+
+  .apphdr{display:flex; align-items:center; gap:10px; margin-bottom:14px;}
+  .apphdr .brand{color:var(--blue); font-size:15px; font-weight:700; display:flex; align-items:center; gap:6px;}
+  .apphdr .spacer{flex:1;}
+  .pill-live{
+    display:flex; align-items:center; gap:4px; color:var(--green); font-size:11px; font-weight:600;
+  }
+  .pill-live i{width:6px; height:6px; border-radius:50%; background:var(--green);}
+  .hdrbtn{
+    background:#262626; border:1px solid var(--bd); color:var(--lbl); font-size:10.5px;
+    padding:3px 9px; border-radius:6px;
+  }
+
+  .card{
+    background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:14px; margin-bottom:12px;
+  }
+  .cardtitle{color:var(--lbl); font-size:10.5px; font-weight:700; letter-spacing:.6px; text-transform:uppercase; margin-bottom:10px;}
+
+  /* ---- tank circle gauge (current/Hybrid) ---- */
+  .tankrow{display:flex; gap:12px;}
+  .tankcard{flex:1; background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:14px; text-align:center;}
+  .gauge{
+    width:84px; height:84px; border-radius:50%; margin:6px auto 8px;
+    background: conic-gradient(var(--blue) 0% var(--pct,70%), #2a2a2a var(--pct,70%) 100%);
+    display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  .gauge::before{content:""; position:absolute; inset:8px; border-radius:50%; background:var(--card);}
+  .gauge span{position:relative; z-index:1; color:var(--txt); font-weight:700; font-size:14px;}
+  .tanklbl{color:var(--lbl); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.4px;}
+  .motorpill{
+    display:inline-block; margin-top:8px; padding:2px 10px; border-radius:20px; font-size:10.5px; font-weight:700;
+  }
+  .motorpill.off{background:rgba(255,77,79,.15); color:var(--red);}
+  .motorpill.on{background:rgba(82,196,26,.15); color:var(--green);}
+  .ctrlbtns{display:flex; gap:6px; margin-top:10px;}
+  .ctrlbtns button{
+    flex:1; padding:6px 0; border-radius:6px; font-size:11px; font-weight:600; border:none; cursor:pointer;
+  }
+  .btn-on{background:var(--blue); color:#fff;}
+  .btn-off{background:var(--red); color:#fff;}
+
+  /* ---- Nova style ---- */
+  .novabanner{
+    background:var(--card); border:1px solid rgba(82,196,26,.4); border-radius:14px; padding:14px 16px;
+    display:flex; align-items:center; gap:10px; margin-bottom:12px;
+  }
+  .novabanner .ico{width:30px; height:30px; border-radius:50%; background:rgba(82,196,26,.15); display:flex; align-items:center; justify-content:center; color:var(--green); font-size:16px;}
+  .novabanner .main{color:var(--txt); font-size:14.5px; font-weight:800;}
+  .novabanner .sub{color:var(--lbl); font-size:11.5px; margin-top:1px;}
+
+  .novacard{
+    background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:18px; margin-bottom:12px;
+  }
+  .novatop{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .novatop span{color:var(--lbl); font-size:11px; font-weight:700; letter-spacing:.6px;}
+  .novabody{display:flex; align-items:center; gap:18px;}
+  .glasstank{
+    width:64px; height:84px; border-radius:14px 14px 18px 18px; border:2px solid var(--blue);
+    position:relative; overflow:hidden; background:rgba(24,144,255,.06); flex-shrink:0;
+  }
+  .glasstank .fill{position:absolute; left:0; right:0; bottom:0; background:var(--blue); opacity:.55;}
+  .novastate{color:var(--blue); font-size:24px; font-weight:900;}
+  .novapct{color:var(--lbl); font-size:12.5px; margin-top:2px;}
+  .novamotorrow{display:flex; justify-content:space-between; align-items:center; margin:14px 0 10px;}
+  .novamotorname{color:var(--txt); font-size:14px; font-weight:700;}
+  .novaoffpill{background:#262626; color:var(--lbl); padding:2px 10px; border-radius:20px; font-size:10.5px; font-weight:700;}
+  .novapower{
+    width:100%; padding:11px 0; border-radius:10px; border:none; font-weight:800; font-size:13.5px;
+    background:var(--green); color:#0a1a0a; cursor:pointer;
+  }
+
+  /* ---- Clean theme ---- */
+  .cleancard{
+    background:var(--card); border:1px solid var(--bd); border-radius:16px; padding:22px; margin-bottom:12px;
+    text-align:center;
+  }
+  .cleanlbl{color:var(--lbl); font-size:11px; letter-spacing:1px; font-weight:700; text-transform:uppercase;}
+  .cleanstate{color:var(--txt); font-size:30px; font-weight:800; margin:10px 0 4px;}
+  .cleanpct{color:var(--lbl); font-size:13px; margin-bottom:14px;}
+  .cleanbtn{padding:9px 26px; border-radius:8px; border:none; background:var(--blue); color:#fff; font-weight:700; font-size:12.5px;}
+
+  /* ---- Console theme ---- */
+  .consolegrid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .consolecell{background:#161616; border:1px solid var(--bd); border-radius:8px; padding:8px; text-align:center;}
+  .consolecell .k{color:var(--lbl); font-size:9px; text-transform:uppercase; letter-spacing:.4px;}
+  .consolecell .v{color:var(--txt); font-size:14px; font-weight:800; margin-top:3px; font-family:monospace;}
+
+  /* ---- theme picker ---- */
+  .themegrid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .themeopt{
+    background:#161616; border:1px solid var(--bd); border-radius:10px; padding:10px 4px; text-align:center; cursor:pointer;
+  }
+  .themeopt.sel{border-color:var(--blue); background:rgba(24,144,255,.1);}
+  .themeopt .emoji{font-size:20px;}
+  .themeopt .name{color:var(--txt); font-size:11.5px; font-weight:700; margin-top:4px;}
+  .themeopt.sel .name{color:var(--blue);}
+  .themeopt .sub{color:var(--lbl); font-size:9px; margin-top:2px;}
+
+  /* ---- history ---- */
+  .chips{display:flex; gap:6px; margin-bottom:10px;}
+  .chip{flex:1; text-align:center; padding:6px 0; border-radius:8px; font-size:11px; font-weight:700; background:#262626; color:var(--lbl); border:1px solid var(--bd);}
+  .chip.active{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .navrow{display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:12px;}
+  .navarrow{width:26px; height:26px; border-radius:50%; background:#262626; border:1px solid var(--bd); color:var(--txt); display:flex; align-items:center; justify-content:center; font-size:14px;}
+  .navlbl{color:var(--txt); font-size:13px; font-weight:700; text-align:center;}
+  .navsub{color:var(--lbl); font-size:10px; text-decoration:underline; margin-top:2px;}
+  .toggle2{display:flex; background:#262626; border-radius:8px; padding:2px; width:fit-content; margin-left:auto;}
+  .toggle2 span{padding:4px 12px; font-size:10.5px; border-radius:6px; color:var(--lbl);}
+  .toggle2 span.on{background:var(--blue); color:#fff; font-weight:700;}
+  .statrow3{display:flex; gap:8px; margin:10px 0;}
+  .stat3{flex:1; background:#262626; border-radius:8px; padding:8px; text-align:center;}
+  .stat3 .v{color:var(--txt); font-size:15px; font-weight:800;}
+  .stat3 .k{color:var(--lbl); font-size:8.5px; margin-top:2px;}
+  .waterbanner2{
+    display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; margin-bottom:8px;
+    background:rgba(24,144,255,.08); border:1px solid rgba(24,144,255,.3);
+  }
+  .waterbanner2 .amt{color:var(--txt); font-size:14px; font-weight:800;}
+  .waterbanner2 .lbl2{color:var(--lbl); font-size:9px; font-weight:700;}
+  table.htbl{width:100%; border-collapse:collapse; font-size:11.5px;}
+  table.htbl th{color:var(--lbl); text-align:left; font-size:9.5px; padding:5px 4px; border-bottom:1px solid var(--bd);}
+  table.htbl td{color:var(--txt); padding:6px 4px; border-bottom:1px solid var(--bd);}
+  .tagpill{padding:1px 7px; border-radius:5px; font-size:9.5px; font-weight:700; border:1px solid;}
+  .tagpill.oh{color:var(--blue); border-color:var(--blue); background:rgba(24,144,255,.12);}
+  .tagpill.ug{color:var(--purple); border-color:var(--purple); background:rgba(146,84,222,.12);}
+
+  /* ---- settings rows ---- */
+  .setrow{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--bd); font-size:12.5px;}
+  .setrow:last-child{border-bottom:none;}
+  .setrow .lbl3{color:var(--txt);}
+  .swtch2{width:34px; height:19px; border-radius:11px; position:relative;}
+  .swtch2.on{background:var(--blue);} .swtch2.off{background:#3a3a3a;}
+  .swtch2 i{position:absolute; top:2px; width:15px; height:15px; border-radius:50%; background:#fff;}
+  .swtch2.on i{right:2px;} .swtch2.off i{left:2px;}
+  .textin{background:#161616; border:1px solid var(--bd); color:var(--txt); border-radius:6px; padding:4px 8px; font-size:12px; width:120px;}
+</style>
+</head>
+<body>
+
+<!-- ============ 1. CURRENT dashboard (Hybrid — baseline, already in web) ============ -->
+<div class="col">
+  <span class="badge existing">ALREADY IN WEB APP</span>
+  <h2>Dashboard — current fixed layout</h2>
+  <p class="desc">Today's web app: one fixed card layout (circle gauges), no theme choice. Shown here for comparison with the new theme options below.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="pill-live"><i></i>Live</div>
+        <div class="hdrbtn">🌙 Dark</div>
+        <div class="hdrbtn">Logout</div>
+      </div>
+      <div class="tankrow">
+        <div class="tankcard">
+          <div class="tanklbl">Overhead</div>
+          <div class="gauge" style="--pct:100%"><span>100%</span></div>
+          <div class="motorpill off">OFF</div>
+          <div class="ctrlbtns"><button class="btn-on">ON</button><button class="btn-off">OFF</button></div>
+        </div>
+        <div class="tankcard">
+          <div class="tanklbl">Underground</div>
+          <div class="gauge" style="--pct:100%"><span>100%</span></div>
+          <div class="motorpill off">OFF</div>
+          <div class="ctrlbtns"><button class="btn-on">ON</button><button class="btn-off">OFF</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">Settings</div>
+        <div class="setrow"><span class="lbl3">OH Display Only</span><div class="swtch2 off"><i></i></div></div>
+        <div class="setrow"><span class="lbl3">Buzzer Delay Before Start</span><div class="swtch2 on"><i></i></div></div>
+        <div class="setrow"><span class="lbl3">Reboot if Unreachable</span><span class="textin" style="display:inline-block;text-align:center;">15 min</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 2. NEW: Nova theme dashboard ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>Dashboard — Nova theme (mirrors Mobile's Nova)</h2>
+  <p class="desc">Big glass-tank visual, plain-language status banner up top, one full-width card per pump. This is the theme you asked to have available in the web app.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="pill-live"><i></i>Live</div>
+        <div class="hdrbtn">🌙 Dark</div>
+        <div class="hdrbtn">Logout</div>
+      </div>
+      <div class="novabanner">
+        <div class="ico">✓</div>
+        <div><div class="main">Everything's fine right now.</div><div class="sub">No action needed.</div></div>
+      </div>
+      <div class="novacard">
+        <div class="novatop"><span>OVERHEAD TANK</span><span>📶</span></div>
+        <div class="novabody">
+          <div class="glasstank"><div class="fill" style="height:100%"></div></div>
+          <div><div class="novastate">FULL</div><div class="novapct">100% full</div></div>
+        </div>
+        <div class="novamotorrow"><span class="novamotorname">Motor</span><span class="novaoffpill">OFF</span></div>
+        <button class="novapower">⏻ POWER ON</button>
+      </div>
+      <div class="novacard">
+        <div class="novatop"><span>UNDERGROUND TANK</span><span>📶</span></div>
+        <div class="novabody">
+          <div class="glasstank"><div class="fill" style="height:100%"></div></div>
+          <div><div class="novastate">FULL</div><div class="novapct">100% full</div></div>
+        </div>
+        <div class="novamotorrow"><span class="novamotorname">Motor</span><span class="novaoffpill">OFF</span></div>
+        <button class="novapower">⏻ POWER ON</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 3. NEW: Theme picker in web Settings ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>Settings — Dashboard Theme picker</h2>
+  <p class="desc">Mirrors the mobile app's theme picker so the web app can switch between Hybrid, Nova, Clean and Console, same as the phone.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="hdrbtn">🌙 Dark</div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">Dashboard Theme</div>
+        <div class="themegrid">
+          <div class="themeopt"><div class="emoji">⚡</div><div class="name">Hybrid</div><div class="sub">Arcs + grid</div></div>
+          <div class="themeopt sel"><div class="emoji">✨</div><div class="name">Nova</div><div class="sub">Big & simple</div></div>
+          <div class="themeopt"><div class="emoji">🧊</div><div class="name">Clean</div><div class="sub">Minimal cards</div></div>
+          <div class="themeopt"><div class="emoji">📟</div><div class="name">Console</div><div class="sub">Dense, no scroll</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">App Theme</div>
+        <div class="themegrid" style="grid-template-columns:repeat(2,1fr)">
+          <div class="themeopt"><div class="emoji">☀️</div><div class="name">Light</div></div>
+          <div class="themeopt sel"><div class="emoji">🌙</div><div class="name">Dark</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 4. NEW: Clean theme dashboard ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>Dashboard — Clean theme</h2>
+  <p class="desc">Minimal single-focus cards, big typography, calm and uncluttered — matches Mobile's Clean concept.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="pill-live"><i></i>Live</div>
+      </div>
+      <div class="cleancard">
+        <div class="cleanlbl">Overhead Tank</div>
+        <div class="cleanstate">FULL</div>
+        <div class="cleanpct">100% full · Motor OFF</div>
+        <button class="cleanbtn">POWER ON</button>
+      </div>
+      <div class="cleancard">
+        <div class="cleanlbl">Underground Tank</div>
+        <div class="cleanstate">FULL</div>
+        <div class="cleanpct">100% full · Motor OFF</div>
+        <button class="cleanbtn">POWER ON</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 5. NEW: Console theme dashboard ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>Dashboard — Console theme</h2>
+  <p class="desc">Dense, everything-above-the-fold grid — good for a wall-mounted monitor or a second screen, matches Mobile's Console concept.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="pill-live"><i></i>Live</div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">System at a glance</div>
+        <div class="consolegrid">
+          <div class="consolecell"><div class="k">OH</div><div class="v">FULL</div></div>
+          <div class="consolecell"><div class="k">UG</div><div class="v">FULL</div></div>
+          <div class="consolecell"><div class="k">OH Motor</div><div class="v">OFF</div></div>
+          <div class="consolecell"><div class="k">UG Motor</div><div class="v">OFF</div></div>
+          <div class="consolecell"><div class="k">WiFi</div><div class="v">-52dBm</div></div>
+          <div class="consolecell"><div class="k">LoRa</div><div class="v">OK</div></div>
+          <div class="consolecell"><div class="k">Uptime</div><div class="v">3h41m</div></div>
+          <div class="consolecell"><div class="k">FW</div><div class="v">2.10.0</div></div>
+        </div>
+      </div>
+      <div class="tankrow">
+        <div class="tankcard" style="padding:10px;">
+          <div class="ctrlbtns"><button class="btn-on">OH ON</button><button class="btn-off">OH OFF</button></div>
+        </div>
+        <div class="tankcard" style="padding:10px;">
+          <div class="ctrlbtns"><button class="btn-on">UG ON</button><button class="btn-off">UG OFF</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 6. NEW: enhanced History (Today/Week/Month/Year + Graph + water banners) ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>History — Today/Week/Month/Year + Graph + water volume</h2>
+  <p class="desc">Web currently only has a date-range table with no Year period, no graph, and no water-pumped volume. This brings it to parity with mobile.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="pill-live"><i></i>Live</div>
+      </div>
+      <div class="chips">
+        <div class="chip active">Today</div><div class="chip">Week</div><div class="chip">Month</div><div class="chip">Year</div>
+      </div>
+      <div class="navrow">
+        <div class="navarrow">‹</div>
+        <div><div class="navlbl">Today</div><div class="navsub">choose date</div></div>
+        <div class="navarrow">›</div>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="cardtitle" style="margin:0;">History</div>
+          <div class="toggle2"><span class="on">Table</span><span>Graph</span></div>
+        </div>
+        <div class="statrow3">
+          <div class="stat3"><div class="v">5</div><div class="k">RUNS TODAY</div></div>
+          <div class="stat3"><div class="v" style="color:var(--blue)">52m</div><div class="k">TOTAL OH RUN</div></div>
+          <div class="stat3"><div class="v" style="color:var(--purple)">15m</div><div class="k">TOTAL UG RUN</div></div>
+        </div>
+        <div class="waterbanner2">
+          💧 <div><div class="amt">~520 L <span class="lbl2">OH WATER PUMPED (EST.)</span></div></div>
+        </div>
+        <table class="htbl">
+          <tr><th>Motor</th><th>On</th><th>Off</th><th>Reason</th><th>Dur</th></tr>
+          <tr><td><span class="tagpill oh">OH</span></td><td>6:02 AM</td><td>6:18 AM</td><td>Auto</td><td>16m</td></tr>
+          <tr><td><span class="tagpill ug">UG</span></td><td>9:40 PM</td><td>9:55 PM</td><td>Manual · App</td><td>15m</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 7. NEW: Water Volume Display + Motor Names settings ============ -->
+<div class="col">
+  <span class="badge new">NEW — add to web app</span>
+  <h2>Settings — Water Volume Display + Motor Names</h2>
+  <p class="desc">Two mobile-only settings missing from web: per-tank water-banner visibility toggle, and custom motor display names.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="page">
+      <div class="apphdr">
+        <div class="brand">💧 Tank Monitor</div>
+        <div class="spacer"></div>
+        <div class="hdrbtn">🌙 Dark</div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">Water Volume Display</div>
+        <div class="setrow"><span class="lbl3">Show OH water pumped</span><div class="swtch2 on"><i></i></div></div>
+        <div class="setrow"><span class="lbl3">Show UG water drawn</span><div class="swtch2 off"><i></i></div></div>
+      </div>
+      <div class="card">
+        <div class="cardtitle">Motor Names</div>
+        <div class="setrow"><span class="lbl3">Overhead motor</span><input class="textin" value="OH Motor"></div>
+        <div class="setrow"><span class="lbl3">Underground motor</span><input class="textin" value="UG Motor"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

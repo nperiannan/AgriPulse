@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>TankMonitor — "Nova" Dashboard Concept (elder-friendly, next-gen)</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#171a24; --card-bd:#262a36; --label:#9aa0b4; --text:#eef1f8;
+    --blue:#4fa3ff; --blue-dim:#1d3a5c;
+    --green:#22e6a0; --green-dim:#123829;
+    --orange:#ffb648; --orange-dim:#4a3212;
+    --red:#ff5d6c; --red-dim:#4a1a20;
+    --glass-bd: rgba(255,255,255,0.14);
+    --radius:26px;
+    --fs-scale: 1;
+    --motion: running;
+  }
+  body.light{
+    --bg:#eef3f8; --card:#ffffff; --card-bd:#d7e1ec; --label:#5b6b7d; --text:#152233;
+    /* Matches the app's established rule: light theme swaps green for blue on
+       "full/safe" so it stays readable on a pale background (see v2.17.0). */
+    --green:#1565c0; --green-dim:#dceafc;
+    --blue-dim:#dceafc; --orange-dim:#fff0da; --red-dim:#ffe1e3;
+    --glass-bd: rgba(20,40,70,0.10);
+  }
+  body.large  { --fs-scale: 1.22; }
+  body.calm-motion .wave-svg, body.calm-motion .pulse { animation-play-state: paused !important; }
+
+  * { box-sizing:border-box; }
+  body{
+    margin:0; min-height:100vh; background:#05060a;
+    font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:22px;
+    padding:28px 14px 60px;
+  }
+  h1{ color:#fff; font-size:22px; margin:0 0 2px; letter-spacing:.2px; }
+  .sub{ color:#8b93a8; font-size:14px; margin-bottom:6px; text-align:center; max-width:640px; }
+
+  /* ── Lab controls (outside the phone — not part of the app) ── */
+  .lab{
+    display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:900px;
+  }
+  .lab button, .lab .toggle{
+    font-size:13.5px; font-weight:600; padding:9px 16px; border-radius:999px;
+    border:1px solid #3a4257; background:#1b1f2c; color:#c9cfe0; cursor:pointer;
+    transition:.15s; user-select:none;
+  }
+  .lab button.active{ background:#4fa3ff; border-color:#4fa3ff; color:#06121f; }
+  .lab .divider{ width:1px; background:#333c4f; margin:2px 6px; }
+  .lab .toggle.on{ background:#22e6a0; border-color:#22e6a0; color:#06251b; }
+
+  /* ── Phone frame ── */
+  .phone{
+    width:390px; max-width:94vw; height:844px; max-height:88vh;
+    background:#000; border-radius:52px; padding:14px; box-shadow:0 30px 80px rgba(0,0,0,.6);
+    border:2px solid #222;
+  }
+  .screen{
+    width:100%; height:100%; background:var(--bg); border-radius:38px; overflow-y:auto;
+    padding:22px 18px 30px; position:relative; -ms-overflow-style:none; scrollbar-width:none;
+  }
+  .screen::-webkit-scrollbar{ display:none; }
+
+  /* ── Header ── */
+  .app-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .greeting{ font-size:calc(21px*var(--fs-scale)); font-weight:800; color:var(--text); }
+  .conn-chip{
+    display:flex; align-items:center; gap:7px; background:var(--card); border:1px solid var(--card-bd);
+    padding:8px 13px; border-radius:999px; font-size:calc(13px*var(--fs-scale)); font-weight:700; color:var(--label);
+  }
+  .conn-dot{ width:9px; height:9px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px var(--green-dim); }
+
+  /* ── Plain-language status banner ── */
+  .banner{
+    background:var(--card); border:1px solid var(--card-bd); border-radius:20px;
+    padding:16px 18px; margin-bottom:16px; display:flex; gap:13px; align-items:flex-start;
+  }
+  .banner .ico{ font-size:26px; line-height:1; margin-top:1px; }
+  .banner .msg-main{ font-size:calc(16.5px*var(--fs-scale)); font-weight:700; color:var(--text); line-height:1.32; }
+  .banner .msg-sub{ font-size:calc(14px*var(--fs-scale)); color:var(--label); margin-top:3px; line-height:1.35; }
+  .banner.info{ border-color:var(--blue); background:linear-gradient(180deg, var(--blue-dim), var(--card) 65%); }
+  .banner.warn{ border-color:var(--orange); background:linear-gradient(180deg, var(--orange-dim), var(--card) 65%); }
+  .banner.ok{ border-color:var(--green); background:linear-gradient(180deg, var(--green-dim), var(--card) 65%); }
+
+  /* ── Tank card ── */
+  .tank-card{
+    background:var(--card); border:1px solid var(--card-bd); border-radius:var(--radius);
+    padding:18px 18px 20px; margin-bottom:14px; display:flex; gap:16px; align-items:center;
+    box-shadow:0 10px 26px rgba(0,0,0,.18);
+  }
+  .tank-glass{
+    position:relative; width:76px; height:108px; border-radius:16px 16px 10px 10px;
+    border:3px solid var(--glass-bd); overflow:hidden; flex-shrink:0;
+    background:rgba(255,255,255,0.02);
+  }
+  .tank-water{
+    position:absolute; left:-2px; right:-2px; bottom:0; transition:height 1.1s ease;
+  }
+  .tank-water .fill{ position:absolute; inset:8px 0 0 0; }
+  .wave-svg{ position:absolute; top:-9px; left:0; width:200%; height:18px; animation:waveMove 3.6s linear infinite; animation-play-state:var(--motion); }
+  @keyframes waveMove{ from{ transform:translateX(0);} to{ transform:translateX(-50%);} }
+  .tank-glass-shine{
+    position:absolute; top:6px; left:8px; width:14px; height:70%; border-radius:8px;
+    background:linear-gradient(180deg, rgba(255,255,255,.35), rgba(255,255,255,0)); pointer-events:none;
+  }
+  .tank-info{ flex:1; min-width:0; }
+  .tank-name{
+    font-size:calc(12.5px*var(--fs-scale)); font-weight:800; letter-spacing:1.1px; color:var(--label);
+    text-transform:uppercase; margin-bottom:6px;
+  }
+  .tank-level-word{ font-size:calc(30px*var(--fs-scale)); font-weight:900; line-height:1; letter-spacing:-.5px; }
+  .tank-level-sub{ font-size:calc(14px*var(--fs-scale)); color:var(--label); margin-top:5px; font-weight:600; }
+
+  /* ── Pump card ── */
+  .pump-card{
+    background:var(--card); border:1px solid var(--card-bd); border-radius:var(--radius);
+    padding:18px; margin-bottom:14px; box-shadow:0 10px 26px rgba(0,0,0,.18);
+  }
+  .pump-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .pump-name{ font-size:calc(15.5px*var(--fs-scale)); font-weight:800; color:var(--text); display:flex; align-items:center; gap:9px; }
+  .pump-name .dot{ width:11px; height:11px; border-radius:50%; }
+  .pump-state-pill{
+    font-size:calc(12.5px*var(--fs-scale)); font-weight:800; padding:6px 12px; border-radius:999px; letter-spacing:.4px;
+  }
+  .pump-btn{
+    width:100%; border:none; border-radius:18px; padding:20px 16px; font-size:calc(19px*var(--fs-scale));
+    font-weight:800; display:flex; align-items:center; justify-content:center; gap:12px; cursor:pointer;
+    min-height:64px; letter-spacing:.2px; transition:.12s transform;
+  }
+  .pump-btn:active{ transform:scale(.98); }
+  .pump-btn .icon-circle{
+    width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,.18); font-size:17px;
+  }
+  .pump-btn.start{ background:linear-gradient(180deg,#4fb3ff,#2f7fe0); color:#fff; }
+  .pump-btn.stop{ background:linear-gradient(180deg,#ff6b78,#e13947); color:#fff; }
+  .pump-btn.sending{ background:#3a4152; color:#c7cede; }
+  .pump-btn.autostarted{ background:linear-gradient(180deg,#4fb3ff,#2f7fe0); color:#fff; }
+  .pump-note{
+    display:flex; gap:10px; align-items:flex-start; margin-top:12px; padding:12px 13px; border-radius:14px;
+  }
+  .pump-note.auto{ background:var(--blue-dim); }
+  .pump-note.blocked{ background:var(--orange-dim); }
+  .pump-note .ico{ font-size:18px; margin-top:1px; }
+  .pump-note .txt{ font-size:calc(13.5px*var(--fs-scale)); color:var(--text); font-weight:600; line-height:1.35; }
+
+  .secondary-row{ display:flex; gap:10px; margin-top:12px; }
+  .secondary-btn{
+    flex:1; border-radius:14px; border:2px solid var(--card-bd); background:transparent; color:var(--label);
+    font-weight:800; font-size:calc(13.5px*var(--fs-scale)); padding:13px 10px; cursor:pointer; min-height:48px;
+  }
+  .secondary-btn.danger{ border-color:var(--red); color:var(--red); }
+
+  .countdown-wrap{ display:flex; align-items:center; gap:16px; margin-bottom:14px; }
+  .countdown-ring{
+    width:64px; height:64px; border-radius:50%; border:6px solid var(--orange-dim);
+    border-top-color:var(--orange); display:flex; align-items:center; justify-content:center;
+    font-size:calc(19px*var(--fs-scale)); font-weight:900; color:var(--orange); flex-shrink:0;
+    animation:spin 3s linear infinite; animation-play-state:var(--motion);
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .countdown-ring span{ display:inline-block; animation:unspin 3s linear infinite; animation-play-state:var(--motion); }
+  @keyframes unspin{ to{ transform:rotate(-360deg); } }
+
+  footer.hint{ color:#5c6478; font-size:12.5px; text-align:center; max-width:620px; margin-top:-4px; }
+  .legend{ display:flex; gap:14px; flex-wrap:wrap; justify-content:center; color:#7d859c; font-size:12px; }
+  .legend b{ color:#c7cede; }
+</style>
+</head>
+<body>
+
+<h1>"Nova" — a more intuitive, elder-friendly dashboard</h1>
+<p class="sub">Every action is a visible button (no long-press). Every pump has its own always-visible card, so two pumps
+running is never ambiguous. Text and touch targets scale up. Color is always paired with a word, never used alone.</p>
+
+<div class="lab">
+  <button data-state="calm" class="active">1 · All fine</button>
+  <button data-state="low">2 · Overhead low</button>
+  <button data-state="countdown">3 · Starting (buzzer)</button>
+  <button data-state="filling">4 · Overhead filling</button>
+  <button data-state="both">5 · Both pumps running</button>
+  <button data-state="blocked">6 · Start refused (full)</button>
+  <div class="divider"></div>
+  <div class="toggle on" id="darkToggle">🌙 Dark</div>
+  <div class="toggle" id="largeToggle">🔎 Large text</div>
+  <div class="toggle" id="motionToggle">🎞️ Motion</div>
+</div>
+
+<div class="phone">
+  <div class="screen" id="screen">
+
+    <div class="app-header">
+      <div class="greeting" id="greeting">Good afternoon</div>
+      <div class="conn-chip"><span class="conn-dot"></span> Online</div>
+    </div>
+
+    <!-- Plain-language status banner -->
+    <div class="banner ok" id="banner">
+      <div class="ico">✅</div>
+      <div>
+        <div class="msg-main">Everything's fine right now.</div>
+        <div class="msg-sub">No action needed. Both tanks have water.</div>
+      </div>
+    </div>
+
+    <!-- Overhead tank -->
+    <div class="tank-card">
+      <div class="tank-glass">
+        <div class="tank-water" id="ohWater" style="height:62%; background:#3f8dff;">
+          <svg class="wave-svg" viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 10 Q50 2 100 10 T200 10 T300 10 T400 10 V20 H0 Z" fill="rgba(255,255,255,.28)"/></svg>
+        </div>
+        <div class="tank-glass-shine"></div>
+      </div>
+      <div class="tank-info">
+        <div class="tank-name">Overhead tank</div>
+        <div class="tank-level-word" id="ohWord" style="color:var(--blue)">HALF FULL</div>
+        <div class="tank-level-sub" id="ohSub">About half a day of use left</div>
+      </div>
+    </div>
+
+    <!-- Overhead pump card -->
+    <div class="pump-card" id="ohCard">
+      <div class="pump-top">
+        <div class="pump-name"><span class="dot" style="background:var(--label)"></span> Overhead pump</div>
+        <div class="pump-state-pill" id="ohPill" style="background:var(--card-bd); color:var(--label)">OFF</div>
+      </div>
+      <div id="ohCountdownWrap" class="countdown-wrap" style="display:none">
+        <div class="countdown-ring"><span id="ohCdNum">18</span></div>
+        <div style="font-size:calc(14.5px*var(--fs-scale)); color:var(--label); font-weight:700; line-height:1.4;">
+          Starting in <b id="ohCdWord" style="color:var(--text)">18 seconds</b><br>Buzzer is warning first
+        </div>
+      </div>
+      <button class="pump-btn start" id="ohBtn">
+        <span class="icon-circle">▶</span> <span id="ohBtnLabel">Turn ON overhead pump</span>
+      </button>
+      <div class="pump-note auto" id="ohAutoNote" style="display:none">
+        <div class="ico">ℹ️</div>
+        <div class="txt">This pump started <b>on its own</b> because the tank was low and the underground tank had water.</div>
+      </div>
+      <div class="pump-note blocked" id="ohBlockedNote" style="display:none">
+        <div class="ico">⚠️</div>
+        <div class="txt">Not started — the overhead tank is <b>already full</b>. Starting anyway may cause it to overflow.</div>
+      </div>
+      <div class="secondary-row" id="ohBlockedActions" style="display:none">
+        <button class="secondary-btn danger">Start anyway</button>
+      </div>
+    </div>
+
+    <!-- Underground tank -->
+    <div class="tank-card">
+      <div class="tank-glass">
+        <div class="tank-water" id="ugWater" style="height:88%; background:#22c98a;">
+          <svg class="wave-svg" viewBox="0 0 400 20" preserveAspectRatio="none"><path d="M0 10 Q50 2 100 10 T200 10 T300 10 T400 10 V20 H0 Z" fill="rgba(255,255,255,.28)"/></svg>
+        </div>
+        <div class="tank-glass-shine"></div>
+      </div>
+      <div class="tank-info">
+        <div class="tank-name">Underground tank</div>
+        <div class="tank-level-word" id="ugWord" style="color:var(--green)">FULL</div>
+        <div class="tank-level-sub" id="ugSub">Plenty of water for the borewell</div>
+      </div>
+    </div>
+
+    <!-- Underground pump card -->
+    <div class="pump-card" id="ugCard">
+      <div class="pump-top">
+        <div class="pump-name"><span class="dot" style="background:var(--label)"></span> Underground pump</div>
+        <div class="pump-state-pill" id="ugPill" style="background:var(--card-bd); color:var(--label)">OFF</div>
+      </div>
+      <button class="pump-btn start" id="ugBtn">
+        <span class="icon-circle">▶</span> <span id="ugBtnLabel">Turn ON underground pump</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <span><b>Blue</b> = filling</span>
+  <span><b>Green</b> = full / safe</span>
+  <span><b>Orange</b> = starting soon / needs attention</span>
+  <span><b>Red</b> = stop / problem</span>
+</div>
+<footer class="hint">Tap a state above to preview it. This is a static mock for design review — not the real app.</footer>
+
+<script>
+const scenarios = {
+  calm: {
+    greeting:'Good afternoon',
+    banner:{cls:'ok', ico:'✅', main:"Everything's fine right now.", sub:'No action needed. Both tanks have water.'},
+    oh:{level:62,color:'var(--blue)',word:'HALF FULL',wordColor:'var(--blue)',sub:'About half a day of use left',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON overhead pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'},
+    ug:{level:88,color:'var(--green)',word:'FULL',wordColor:'var(--green)',sub:'Plenty of water for the borewell',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON underground pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'}
+  },
+  low: {
+    greeting:'Good afternoon',
+    banner:{cls:'warn', ico:'💧', main:'Overhead tank is running low.', sub:'Underground has water — safe to fill now.'},
+    oh:{level:18,color:'var(--orange)',word:'LOW',wordColor:'var(--orange)',sub:'Less than a couple hours of use left',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON overhead pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'},
+    ug:{level:88,color:'var(--green)',word:'FULL',wordColor:'var(--green)',sub:'Plenty of water for the borewell',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON underground pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'}
+  },
+  countdown: {
+    greeting:'Good afternoon',
+    banner:{cls:'warn', ico:'🔔', main:'Overhead pump is starting…', sub:'A short warning buzzer sounds first, so anyone nearby is not surprised.'},
+    oh:{level:18,color:'var(--orange)',word:'LOW',wordColor:'var(--orange)',sub:'Less than a couple hours of use left',
+        pump:'countdown', btnClass:'stop', btnLabel:'Cancel start', pill:'STARTING…', pillBg:'var(--orange-dim)', pillColor:'var(--orange)'},
+    ug:{level:88,color:'var(--green)',word:'FULL',wordColor:'var(--green)',sub:'Plenty of water for the borewell',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON underground pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'}
+  },
+  filling: {
+    greeting:'Good afternoon',
+    banner:{cls:'info', ico:'🚰', main:'Filling the overhead tank.', sub:'You can stop it any time — it will stop by itself once full.'},
+    oh:{level:38,color:'var(--blue)',word:'FILLING',wordColor:'var(--blue)',sub:'Running for 6 minutes',
+        pump:'on', btnClass:'stop', btnLabel:'Turn OFF overhead pump', pill:'RUNNING', pillBg:'var(--blue-dim)', pillColor:'var(--blue)'},
+    ug:{level:82,color:'var(--green)',word:'GOOD',wordColor:'var(--green)',sub:'Water is flowing to the overhead tank',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON underground pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'}
+  },
+  both: {
+    greeting:'Good afternoon',
+    banner:{cls:'info', ico:'🚰', main:'Both pumps are running.', sub:'The overhead pump started on its own because the tank was low.'},
+    oh:{level:24,color:'var(--blue)',word:'FILLING',wordColor:'var(--blue)',sub:'Started automatically 1 minute ago',
+        pump:'on-auto', btnClass:'stop', btnLabel:'Turn OFF overhead pump', pill:'RUNNING', pillBg:'var(--blue-dim)', pillColor:'var(--blue)'},
+    ug:{level:46,color:'var(--green)',word:'FILLING',wordColor:'var(--green)',sub:'You started this one manually',
+        pump:'on', btnClass:'stop', btnLabel:'Turn OFF underground pump', pill:'RUNNING', pillBg:'var(--green-dim)', pillColor:'var(--green)'}
+  },
+  blocked: {
+    greeting:'Good afternoon',
+    banner:{cls:'ok', ico:'✅', main:'Overhead tank is already full.', sub:'Nothing needs your attention.'},
+    oh:{level:100,color:'var(--green)',word:'FULL',wordColor:'var(--green)',sub:'You just tried to start the pump',
+        pump:'blocked', btnClass:'start', btnLabel:'Turn ON overhead pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'},
+    ug:{level:60,color:'var(--green)',word:'GOOD',wordColor:'var(--green)',sub:'Plenty of water for the borewell',
+        pump:'off', btnClass:'start', btnLabel:'Turn ON underground pump', pill:'OFF', pillBg:'var(--card-bd)', pillColor:'var(--label)'}
+  }
+};
+
+function applyTank(prefix, t){
+  document.getElementById(prefix+'Water').style.height = t.level+'%';
+  document.getElementById(prefix+'Water').style.background = t.color;
+  const w = document.getElementById(prefix+'Word'); w.textContent = t.word; w.style.color = t.wordColor;
+  document.getElementById(prefix+'Sub').textContent = t.sub;
+  const pill = document.getElementById(prefix+'Pill');
+  pill.textContent = t.pill; pill.style.background = t.pillBg; pill.style.color = t.pillColor;
+  const btn = document.getElementById(prefix+'Btn');
+  btn.className = 'pump-btn ' + t.btnClass;
+  document.getElementById(prefix+'BtnLabel').textContent = t.btnLabel;
+}
+
+function setState(name){
+  const s = scenarios[name];
+  document.getElementById('greeting').textContent = s.greeting;
+  const b = document.getElementById('banner');
+  b.className = 'banner ' + s.banner.cls;
+  b.querySelector('.ico').textContent = s.banner.ico;
+  b.querySelector('.msg-main').textContent = s.banner.main;
+  b.querySelector('.msg-sub').textContent = s.banner.sub;
+
+  applyTank('oh', s.oh);
+  applyTank('ug', s.ug);
+
+  document.getElementById('ohCountdownWrap').style.display = s.oh.pump === 'countdown' ? 'flex' : 'none';
+  document.getElementById('ohAutoNote').style.display = s.oh.pump === 'on-auto' ? 'flex' : 'none';
+  document.getElementById('ohBlockedNote').style.display = s.oh.pump === 'blocked' ? 'flex' : 'none';
+  document.getElementById('ohBlockedActions').style.display = s.oh.pump === 'blocked' ? 'flex' : 'none';
+
+  document.querySelectorAll('.lab button[data-state]').forEach(btn=>{
+    btn.classList.toggle('active', btn.dataset.state === name);
+  });
+}
+
+document.querySelectorAll('.lab button[data-state]').forEach(btn=>{
+  btn.addEventListener('click', ()=> setState(btn.dataset.state));
+});
+
+document.getElementById('darkToggle').addEventListener('click', function(){
+  document.body.classList.toggle('light');
+  this.classList.toggle('on');
+  this.textContent = document.body.classList.contains('light') ? '☀️ Light' : '🌙 Dark';
+});
+document.getElementById('largeToggle').addEventListener('click', function(){
+  document.body.classList.toggle('large');
+  this.classList.toggle('on');
+});
+document.getElementById('motionToggle').addEventListener('click', function(){
+  document.body.classList.toggle('calm-motion');
+  this.classList.toggle('on');
+  this.textContent = document.body.classList.contains('calm-motion') ? '⏸️ Motion off' : '🎞️ Motion';
+});
+
+setState('calm');
+</script>
+</body>
+</html>

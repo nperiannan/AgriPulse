@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web App — Next-Gen redesign concepts</title>
+<style>
+  *{box-sizing:border-box;}
+  body{
+    background:#08080a; margin:0; padding:32px; font-family:'Inter','Segoe UI',Roboto,Arial,sans-serif;
+    display:flex; gap:36px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+  }
+  .col{display:flex; flex-direction:column; align-items:center; gap:10px; max-width:760px;}
+  .col h2{color:#fff; font-size:16px; font-weight:800; margin:0; text-align:center;}
+  .col h3{color:#7a7a85; font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; margin:0 0 -4px;}
+  .col p.desc{color:#9a9aa5; font-size:12.5px; max-width:700px; text-align:center; margin:0 0 6px; line-height:1.55;}
+  .browser{
+    width:740px; border-radius:14px; overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,.7);
+  }
+  .chrome{
+    background:#0c0c0e; padding:9px 14px; display:flex; align-items:center; gap:6px;
+    border-bottom:1px solid #1c1c22;
+  }
+  .chrome .dot{width:9px; height:9px; border-radius:50%;}
+  .chrome .dot.r{background:#ff5f56;} .chrome .dot.y{background:#ffbd2e;} .chrome .dot.g{background:#27c93f;}
+  .chrome .url{flex:1; margin-left:8px; background:#17171b; border-radius:6px; padding:3px 10px; color:#5c5c66; font-size:10.5px; font-family:monospace;}
+  .divider{width:100%; max-width:1600px; height:1px; background:#1c1c22; margin:20px 0;}
+  .sectionhdr{width:100%; text-align:center; margin-bottom:6px;}
+  .sectionhdr .tag{
+    display:inline-block; background:#141418; border:1px solid #26262e; color:#fff; padding:6px 18px;
+    border-radius:20px; font-size:12px; font-weight:800; letter-spacing:.6px;
+  }
+
+  /* ============================================================= */
+  /* NEXT-GEN 1 — "Bento Grid": asymmetric cards, indigo accent     */
+  /* ============================================================= */
+  .bg-page{background:#0b0b0e; padding:20px;}
+  .bg-nav{display:flex; align-items:center; margin-bottom:16px;}
+  .bg-brand{color:#fff; font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;}
+  .bg-nav .spacer{flex:1;}
+  .bg-navpill{display:flex; background:#141418; border:1px solid #24242c; border-radius:12px; padding:3px; gap:2px;}
+  .bg-navpill span{padding:6px 13px; border-radius:9px; font-size:11.5px; font-weight:700; color:#7a7a85;}
+  .bg-navpill span.active{background:#6366f1; color:#fff;}
+  .bg-live{display:flex; align-items:center; gap:5px; color:#34d399; font-size:11px; font-weight:700; margin-left:12px;}
+  .bg-live i{width:6px; height:6px; border-radius:50%; background:#34d399; box-shadow:0 0 8px #34d399;}
+
+  .bg-grid{display:grid; grid-template-columns:1.3fr 1fr 1fr; grid-template-rows:auto auto; gap:12px;}
+  .bg-card{background:#131317; border:1px solid #201f26; border-radius:20px; padding:16px; position:relative; overflow:hidden;}
+  .bg-hero{grid-row:span 2; background:linear-gradient(160deg,#171522,#101014); border:1px solid #262435;}
+  .bg-hero::after{content:""; position:absolute; width:180px; height:180px; background:radial-gradient(circle,rgba(99,102,241,.25),transparent 70%); top:-60px; right:-40px;}
+  .bg-herolbl{color:#9d9ce8; font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase;}
+  .bg-heroval{color:#fff; font-size:15px; font-weight:800; margin-top:10px;}
+  .bg-tankmini{display:flex; align-items:center; gap:12px; margin-top:16px; padding-top:14px; border-top:1px solid #211f2c;}
+  .bg-tankmini:first-of-type{border-top:none; margin-top:6px; padding-top:0;}
+  .bg-ring{
+    width:52px; height:52px; border-radius:50%; flex-shrink:0; position:relative;
+    background:conic-gradient(#6366f1 0% var(--p,100%), #201f26 var(--p,100%) 100%);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .bg-ring::before{content:""; position:absolute; inset:6px; border-radius:50%; background:#141319;}
+  .bg-ring span{position:relative; z-index:1; color:#fff; font-size:11px; font-weight:800;}
+  .bg-tankinfo .n{color:#fff; font-size:13px; font-weight:700;}
+  .bg-tankinfo .s{color:#7a7a85; font-size:10.5px; margin-top:1px;}
+  .bg-tankctrl{margin-left:auto; padding:5px 12px; border-radius:9px; background:#6366f1; color:#fff; font-size:10.5px; font-weight:700;}
+
+  .bg-statk{color:#7a7a85; font-size:10px; font-weight:700; letter-spacing:.4px; text-transform:uppercase;}
+  .bg-statv{color:#fff; font-size:26px; font-weight:800; margin-top:8px;}
+  .bg-statsub{color:#4f4f5a; font-size:10.5px; margin-top:2px;}
+  .bg-accent-dot{width:8px; height:8px; border-radius:50%; position:absolute; top:16px; right:16px;}
+
+  .bg-wide{grid-column:span 2;}
+  .bg-runrow{display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #1c1b22;}
+  .bg-runrow:first-of-type{border-top:none;}
+  .bg-motortag{padding:2px 8px; border-radius:7px; font-size:9.5px; font-weight:800;}
+  .bg-motortag.oh{background:rgba(99,102,241,.15); color:#818cf8;}
+  .bg-motortag.ug{background:rgba(236,72,153,.15); color:#f472b6;}
+  .bg-runtxt{color:#e5e5ea; font-size:11.5px; flex:1;}
+  .bg-rundur{color:#7a7a85; font-size:11px; font-weight:700;}
+
+  /* ============================================================= */
+  /* NEXT-GEN 2 — "Fluid Rings": Apple-Health-style activity rings  */
+  /* ============================================================= */
+  .fr-page{background:radial-gradient(ellipse at top,#141024 0%,#08080c 60%); padding:22px;}
+  .fr-nav{display:flex; align-items:center; margin-bottom:18px;}
+  .fr-brand{color:#fff; font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;}
+  .fr-nav .spacer{flex:1;}
+  .fr-tabs{display:flex; gap:16px;}
+  .fr-tab{color:#6b6b78; font-size:12px; font-weight:700; padding-bottom:4px;}
+  .fr-tab.active{color:#fff; border-bottom:2px solid #a78bfa;}
+  .fr-live{display:flex; align-items:center; gap:5px; color:#34d399; font-size:11px; font-weight:700; margin-left:16px;}
+  .fr-live i{width:6px; height:6px; border-radius:50%; background:#34d399;}
+
+  .fr-heroring{
+    display:flex; align-items:center; justify-content:center; gap:28px;
+    background:#121018; border:1px solid #221f2e; border-radius:24px; padding:26px; margin-bottom:14px;
+  }
+  .fr-ringwrap{position:relative; width:150px; height:150px;}
+  .fr-ring-svg{width:150px; height:150px; transform:rotate(-90deg);}
+  .fr-ringcenter{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .fr-ringcenter .big{color:#fff; font-size:22px; font-weight:800;}
+  .fr-ringcenter .sml{color:#8b8b98; font-size:10px; margin-top:2px;}
+  .fr-legend{display:flex; flex-direction:column; gap:14px;}
+  .fr-legrow{display:flex; align-items:center; gap:10px;}
+  .fr-legdot{width:10px; height:10px; border-radius:3px;}
+  .fr-legtxt .n{color:#fff; font-size:13px; font-weight:700;}
+  .fr-legtxt .s{color:#8b8b98; font-size:10.5px; margin-top:1px;}
+  .fr-legbtn{margin-left:14px; padding:5px 13px; border-radius:9px; font-size:10.5px; font-weight:700; background:#211f2e; color:#c4b5fd; border:1px solid #382f52;}
+
+  .fr-row2{display:flex; gap:12px;}
+  .fr-card{flex:1; background:#121018; border:1px solid #221f2e; border-radius:18px; padding:14px;}
+  .fr-cardk{color:#8b8b98; font-size:9.5px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;}
+  .fr-cardv{color:#fff; font-size:19px; font-weight:800; margin-top:8px;}
+  .fr-chiprow{display:flex; gap:6px; margin-top:12px;}
+  .fr-chip{flex:1; text-align:center; padding:7px 0; border-radius:10px; font-size:10.5px; font-weight:700; background:#1a1826; color:#8b8b98;}
+  .fr-chip.active{background:linear-gradient(135deg,#a78bfa,#6366f1); color:#fff;}
+</style>
+</head>
+<body>
+
+<div class="sectionhdr"><span class="tag">NEXT-GEN · OPTION 1</span></div>
+
+<!-- ============ Bento Grid — Dashboard ============ -->
+<div class="col">
+  <h3>Bento Grid</h3>
+  <h2>Dashboard — asymmetric card grid, single indigo accent</h2>
+  <p class="desc">The current 2025 "bento box" dashboard trend (Apple/Linear/Vercel style): one large hero card holding both tanks, smaller stat tiles around it, hairline borders instead of gradients, one confident accent color, big bold numbers.</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="bg-page">
+      <div class="bg-nav">
+        <div class="bg-brand">💧 Tank Monitor</div>
+        <div class="bg-navpill">
+          <span class="active">Dashboard</span><span>History</span><span>Settings</span><span>System</span>
+        </div>
+        <div class="bg-live"><i></i>Live</div>
+        <div class="spacer"></div>
+      </div>
+      <div class="bg-grid">
+        <div class="bg-card bg-hero">
+          <div class="bg-herolbl">Tanks</div>
+          <div class="bg-tankmini">
+            <div class="bg-ring" style="--p:100%"><span>100%</span></div>
+            <div class="bg-tankinfo"><div class="n">Overhead</div><div class="s">Full · Motor off</div></div>
+            <div class="bg-tankctrl">Power On</div>
+          </div>
+          <div class="bg-tankmini">
+            <div class="bg-ring" style="--p:100%"><span>100%</span></div>
+            <div class="bg-tankinfo"><div class="n">Underground</div><div class="s">Full · Motor off</div></div>
+            <div class="bg-tankctrl">Power On</div>
+          </div>
+        </div>
+        <div class="bg-card">
+          <div class="bg-accent-dot" style="background:#34d399"></div>
+          <div class="bg-statk">System</div>
+          <div class="bg-statv">OK</div>
+          <div class="bg-statsub">LoRa · WiFi -52dBm</div>
+        </div>
+        <div class="bg-card">
+          <div class="bg-accent-dot" style="background:#818cf8"></div>
+          <div class="bg-statk">Uptime</div>
+          <div class="bg-statv">3h 41m</div>
+          <div class="bg-statsub">FW v2.10.0</div>
+        </div>
+        <div class="bg-card bg-wide">
+          <div class="bg-statk">Today's Runs</div>
+          <div class="bg-runrow"><span class="bg-motortag oh">OH</span><span class="bg-runtxt">6:02 AM → 6:18 AM · Auto</span><span class="bg-rundur">16m</span></div>
+          <div class="bg-runrow"><span class="bg-motortag ug">UG</span><span class="bg-runtxt">9:40 PM → 9:55 PM · Manual · App</span><span class="bg-rundur">15m</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+<div class="sectionhdr"><span class="tag">NEXT-GEN · OPTION 2</span></div>
+
+<!-- ============ Fluid Rings — Dashboard ============ -->
+<div class="col">
+  <h3>Fluid Rings</h3>
+  <h2>Dashboard — Apple-Health-style activity rings</h2>
+  <p class="desc">A completely different next-gen feel: dual-tank progress shown as overlapping colored rings (like Apple Watch activity rings) in one hero card, violet/indigo gradient glow, floating stat cards below — playful, modern, very "consumer app" rather than "industrial dashboard".</p>
+  <div class="browser">
+    <div class="chrome"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div><div class="url">tankmonitor.example.com</div></div>
+    <div class="fr-page">
+      <div class="fr-nav">
+        <div class="fr-brand">💧 Tank Monitor</div>
+        <div class="fr-tabs">
+          <div class="fr-tab active">Dashboard</div>
+          <div class="fr-tab">History</div>
+          <div class="fr-tab">Settings</div>
+          <div class="fr-tab">System</div>
+        </div>
+        <div class="fr-live"><i></i>Live</div>
+        <div class="spacer"></div>
+      </div>
+      <div class="fr-heroring">
+        <div class="fr-ringwrap">
+          <svg class="fr-ring-svg" viewBox="0 0 150 150">
+            <circle cx="75" cy="75" r="66" stroke="#221f2e" stroke-width="12" fill="none"/>
+            <circle cx="75" cy="75" r="66" stroke="#818cf8" stroke-width="12" fill="none" stroke-dasharray="414.7" stroke-dashoffset="0" stroke-linecap="round"/>
+            <circle cx="75" cy="75" r="48" stroke="#221f2e" stroke-width="12" fill="none"/>
+            <circle cx="75" cy="75" r="48" stroke="#f472b6" stroke-width="12" fill="none" stroke-dasharray="301.6" stroke-dashoffset="0" stroke-linecap="round"/>
+          </svg>
+          <div class="fr-ringcenter"><div class="big">100%</div><div class="sml">both full</div></div>
+        </div>
+        <div class="fr-legend">
+          <div class="fr-legrow">
+            <div class="fr-legdot" style="background:#818cf8"></div>
+            <div class="fr-legtxt"><div class="n">Overhead</div><div class="s">Full · Motor off</div></div>
+            <div class="fr-legbtn">Power On</div>
+          </div>
+          <div class="fr-legrow">
+            <div class="fr-legdot" style="background:#f472b6"></div>
+            <div class="fr-legtxt"><div class="n">Underground</div><div class="s">Full · Motor off</div></div>
+            <div class="fr-legbtn">Power On</div>
+          </div>
+        </div>
+      </div>
+      <div class="fr-row2">
+        <div class="fr-card"><div class="fr-cardk">Runs Today</div><div class="fr-cardv">5</div></div>
+        <div class="fr-card"><div class="fr-cardk">OH Runtime</div><div class="fr-cardv">52m</div></div>
+        <div class="fr-card"><div class="fr-cardk">UG Runtime</div><div class="fr-cardv">15m</div></div>
+      </div>
+      <div class="fr-card" style="margin-top:12px;">
+        <div class="fr-cardk">History</div>
+        <div class="fr-chiprow">
+          <div class="fr-chip active">Today</div><div class="fr-chip">Week</div><div class="fr-chip">Month</div><div class="fr-chip">Year</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
