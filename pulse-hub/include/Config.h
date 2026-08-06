@@ -218,6 +218,13 @@
 #define NVS_KEY_DRIVE_MIN_OFF   "min_off"
 #define NVS_KEY_DRIVE_LOCKOUT   "lockout"
 
+// Web UI login. No default password ships in source: one is generated on first
+// boot and logged until the user changes it.
+#define NVS_WEBAUTH_NS          "web_auth"
+#define NVS_KEY_WEB_USER        "user"
+#define NVS_KEY_WEB_PASS        "pass"
+#define NVS_KEY_WEB_PASS_GEN    "pass_gen"
+
 // =============================================================================
 //                              UG TANK FLOAT SWITCH PINS
 // =============================================================================
@@ -395,7 +402,18 @@
 //                              WIFI DEFAULTS
 // =============================================================================
 #define DEFAULT_AP_SSID      "AgriPulse"
-#define DEFAULT_AP_PASSWORD  "tank1234"
+// Build-time defaults only — these are committed to git, so treat them as
+// public. Both are overridden at runtime from NVS (set them from the web UI
+// during deployment), and the AP password must stay >= 8 chars for WPA2.
+#define DEFAULT_AP_PASSWORD  "password"
+#define DEFAULT_OTA_PASSWORD "password"
+
+// Runtime overrides. Whatever OTA password is stored here must match the
+// --auth= value passed by platformio.ini when uploading.
+#define NVS_APCFG_NS         "ap_cfg"
+#define NVS_KEY_AP_PASS      "ap_pass"
+#define NVS_KEY_OTA_PASS     "ota_pass"
+
 #define MAX_WIFI_NETWORKS        5
 #define WIFI_RECONNECT_DELAY_MS  5000UL
 #define MAX_WIFI_CONNECT_ATTEMPTS   20

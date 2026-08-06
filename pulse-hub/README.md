@@ -87,7 +87,7 @@ Tracked so they are not lost between sessions.
 | 5 | Folder is spelled `harwaredetails` (missing a `d`). Rename to `hardwaredetails` when convenient. |
 | 6 | Partition table maps only 4 MB of the module's 16 MB flash. |
 | 7 | `IO39–42` are the JTAG lines (`TCK/TDO/TDI/TMS`) yet v1 uses `40/41` for touch and `42` for float. Consistent with the board revision notes, but the first place to look if touch or float misbehave. |
-| 8 | Credentials committed in the deploy scripts and the `tank1234` AP password should be rotated and moved out of git. |
+| 8 | AP/OTA password (`agripulse`) and the web login (`admin`/`password`) are build-time defaults committed to git. Rotate them, and move the AP/OTA secret out of the repo, before deployment. |
 
 ## Build & Flash
 
@@ -114,11 +114,12 @@ Hold **BOOT** button during "Connecting..." if auto-reset doesn't trigger.
 | Service | Default |
 | --- | --- |
 | AP SSID | `AgriPulse` |
-| AP Password | `tank1234` |
+| AP Password | `agripulse` |
 | AP IP | `192.168.4.1` |
 | Web UI | `http://agripulse.local` or `http://192.168.4.1` |
+| Web UI login | `admin` / `password` — **change before deployment** |
 | OTA hostname | `agripulse` |
-| OTA password | `tank1234` |
+| OTA password | `agripulse` |
 | MQTT broker | `nperiannan-nas.freemyip.com:1883` |
 | MQTT topic pub | `tm/{mac}/status` |
 | MQTT topic sub | `tm/{mac}/control` |

@@ -51,6 +51,9 @@ ProtConfig& protConfig();
 // considered here because the motor is stopped.
 ProtTrip protCheckStartAllowed();
 
+// Same evaluation without logging, for status polling by the UI.
+ProtTrip protSupplyStatus();
+
 // Evaluated continuously while the motor is confirmed running.
 // runningMs is time since the motor was *confirmed* running (not since the
 // START pulse), and drives the inrush / dry-run blanking windows.

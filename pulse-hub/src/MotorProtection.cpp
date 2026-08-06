@@ -115,6 +115,10 @@ static ProtTrip checkSupply() {
     return PROT_OK;
 }
 
+ProtTrip protSupplyStatus() {
+    return checkSupply();
+}
+
 ProtTrip protCheckStartAllowed() {
     ProtTrip t = checkSupply();
     if (t != PROT_OK) {

@@ -11,22 +11,74 @@
 #include "History.h"
 #include "MQTTManager.h"
 #include "RTCManager.h"
+#include "ApiCommon.h"
 #include <WebServer.h>   // Arduino ESP32 WebServer library
 #include <ArduinoJson.h>
 #include <WiFi.h>
 #include <esp_system.h>
+#include <Preferences.h>
 
 static WebServer server(80);
+
+// The API modules read request arguments through this reference rather than
+// owning a server instance of their own.
+WebServer& apiServer = server;
+
+// ---------------------------------------------------------------------------
+//  Authentication
+// ---------------------------------------------------------------------------
+// Guards the web UI only.  The panel touch buttons are deliberately exempt:
+// standing at the panel is itself proof of authorisation, and requiring a
+// password to stop a motor by hand would be actively dangerous.
+//
+// There is no TLS on this server, so the browser is challenged with Digest
+// (password never crosses the wire) while a Basic header is still accepted for
+// simple API clients.
+//
+// Ships with admin/password for bench work. That is a known-weak default and
+// must be changed before the unit is deployed; it is logged loudly on every
+// boot until it is.
+static String webUser = "admin";
+static String webPass;
+static bool   webPassIsDefault = true;
+
+#define WEB_PASS_DEFAULT "password"
+
+static void loadWebCredentials() {
+    Preferences p;
+    p.begin(NVS_WEBAUTH_NS, false);
+    webUser          = p.getString(NVS_KEY_WEB_USER, "admin");
+    webPass          = p.getString(NVS_KEY_WEB_PASS, "");
+    webPassIsDefault = p.getBool(NVS_KEY_WEB_PASS_GEN, true);
+
+    // Anything the user has not explicitly set is forced back to the shipped
+    // default, so an earlier build's generated password cannot linger in NVS
+    // and lock the operator out.
+    if (webPassIsDefault && webPass != WEB_PASS_DEFAULT) {
+        webPass = WEB_PASS_DEFAULT;
+        p.putString(NVS_KEY_WEB_PASS, webPass);
+        p.putBool(NVS_KEY_WEB_PASS_GEN, true);
+    }
+    p.end();
+
+    if (webPassIsDefault) {
+        Log(WARN, "==================================================");
+        Log(WARN, "[Web] DEFAULT LOGIN IN USE - user: " + webUser + "  password: " + webPass);
+        Log(WARN, "[Web] Change it before deploying. Anyone on this network can");
+        Log(WARN, "[Web] otherwise command the motor.");
+        Log(WARN, "==================================================");
+    }
+}
+
+static bool requireAuth() {
+    if (server.authenticate(webUser.c_str(), webPass.c_str())) return true;
+    server.requestAuthentication(DIGEST_AUTH, "AgriPulse", "Authentication required");
+    return false;
+}
 
 // ---------------------------------------------------------------------------
 //  Helpers
 // ---------------------------------------------------------------------------
-
-static bool isAuthenticated() {
-    // Simple bearer token check via query param ?auth=<password>
-    // For basic protection on the local network.
-    return true; // Open – rely on network security (home WiFi)
-}
 
 static void sendJson(int code, const String& json) {
     server.send(code, "application/json", json);
@@ -42,6 +94,11 @@ static void sendError(const char* msg) {
     s += "\"}";
     sendJson(400, s);
 }
+
+// Same helpers, exposed to the API modules.
+void apiSendJson(int code, const String& json) { sendJson(code, json); }
+void apiSendOk()                               { sendOk(); }
+void apiSendError(const char* msg)             { sendError(msg); }
 
 // ---------------------------------------------------------------------------
 //  GET /  – Main status page
@@ -265,6 +322,28 @@ input:checked+.sld::before{transform:translateX(18px)}
     <div style="display:flex;gap:6px;flex:1">
       <input id="mqtt_pass_inp" class="inp" type="password" placeholder="New password" style="flex:1">
       <button class="btn btn-o" style="flex:none;padding:6px 14px;font-size:13px" onclick="setMqttPass()">Set</button>
+    </div>
+  </div>
+  <div class="trow" style="gap:8px">
+    <span class="tlbl" style="white-space:nowrap">Web Login</span>
+    <div style="display:flex;gap:6px;flex:1">
+      <input id="web_user_inp" class="inp" type="text" placeholder="Username" style="flex:1;min-width:80px">
+      <input id="web_pass_inp" class="inp" type="password" placeholder="New password (min 8)" style="flex:1;min-width:80px">
+      <button class="btn btn-o" style="flex:none;padding:6px 14px;font-size:13px" onclick="setWebPass()">Set</button>
+    </div>
+  </div>
+  <div class="trow" style="gap:8px">
+    <span class="tlbl" style="white-space:nowrap">AP Hotspot Password</span>
+    <div style="display:flex;gap:6px;flex:1">
+      <input id="ap_pass_inp" class="inp" type="password" placeholder="New password (min 8)" style="flex:1">
+      <button class="btn btn-o" style="flex:none;padding:6px 14px;font-size:13px" onclick="setApPass()">Set</button>
+    </div>
+  </div>
+  <div class="trow" style="gap:8px">
+    <span class="tlbl" style="white-space:nowrap">OTA Upload Password</span>
+    <div style="display:flex;gap:6px;flex:1">
+      <input id="ota_pass_inp" class="inp" type="password" placeholder="New password (min 8)" style="flex:1">
+      <button class="btn btn-o" style="flex:none;padding:6px 14px;font-size:13px" onclick="setOtaPass()">Set</button>
     </div>
   </div>
 </div>
@@ -634,6 +713,20 @@ function setMqttPass(){
   fetch('/setmqttpass',{method:'POST',body:new URLSearchParams({pass:p})})
     .then(function(r){return r.json();}).then(function(d){
       if(d.ok){document.getElementById('mqtt_pass_inp').value='';toast('MQTT password updated','ok');}
+      else toast(d.error||'Failed','err');
+    }).catch(function(){toast('Failed','err');});
+}
+// ---- Web login ----
+function setWebPass(){
+  var u=document.getElementById('web_user_inp').value;
+  var p=document.getElementById('web_pass_inp').value;
+  if(p.length<8){toast('Password must be at least 8 characters','err');return;}
+  fetch('/setwebpass',{method:'POST',body:new URLSearchParams({user:u,pass:p})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(d.ok){
+        document.getElementById('web_pass_inp').value='';
+        toast('Web login updated - sign in again with the new password','ok');
+      }
       else toast(d.error||'Failed','err');
     }).catch(function(){toast('Failed','err');});
 }
@@ -1288,6 +1381,44 @@ static void handleSetMqttPass() {
 }
 
 // ---------------------------------------------------------------------------
+//  POST /setappass  – change the AP hotspot / OTA upload passwords
+// ---------------------------------------------------------------------------
+
+static void handleSetApPass() {
+    String ap  = server.arg("ap");
+    String ota = server.arg("ota");
+    if (ap.isEmpty() && ota.isEmpty()) { sendError("nothing to change"); return; }
+
+    if (!ap.isEmpty() && !setApPassword(ap)) {
+        sendError("AP password must be at least 8 characters"); return;
+    }
+    if (!ota.isEmpty() && !setOtaPassword(ota)) {
+        sendError("OTA password must be at least 8 characters"); return;
+    }
+    sendOk();
+}
+
+static void handleSetWebPass() {
+    String newUser = server.arg("user");
+    String newPass = server.arg("pass");
+    if (newPass.length() < 8) { sendError("password must be at least 8 characters"); return; }
+    if (newUser.isEmpty()) newUser = webUser;
+
+    Preferences p;
+    p.begin(NVS_WEBAUTH_NS, false);
+    p.putString(NVS_KEY_WEB_USER, newUser);
+    p.putString(NVS_KEY_WEB_PASS, newPass);
+    p.putBool(NVS_KEY_WEB_PASS_GEN, false);
+    p.end();
+
+    webUser            = newUser;
+    webPass            = newPass;
+    webPassIsDefault   = false;
+    Log(WARN, "[Web] Login changed - the default password is no longer valid");
+    sendOk();
+}
+
+// ---------------------------------------------------------------------------
 //  GET /mqttconfig  – return current MQTT broker, port, connection status
 // ---------------------------------------------------------------------------
 
@@ -1325,40 +1456,57 @@ static void handleSetMqttBroker() {
 // ---------------------------------------------------------------------------
 
 void setupWebServer() {
-    // Note: server is an Arduino ESP32 WebServer instance
-    server.on("/",                   HTTP_GET,  handleRoot);
-    server.on("/status",             HTTP_GET,  handleStatus);
-    server.on("/motor",              HTTP_GET,  handleOHMotor);
-    server.on("/undergroundmotor",   HTTP_GET,  handleUGMotor);
-    server.on("/wifiscan",            HTTP_GET,  handleWifiScan);
-    server.on("/wifilist",           HTTP_GET,  handleWifiList);
-    server.on("/addwifi",            HTTP_POST, handleAddWifi);
-    server.on("/setwifipriority",    HTTP_POST, handleSetWifiPriority);
-    server.on("/deletewifi",         HTTP_GET,  handleDeleteWifi);
-    server.on("/setconfig",          HTTP_POST, handleSetConfig);
-    server.on("/reboot",             HTTP_POST, handleReboot);
-    server.on("/factoryreset",       HTTP_POST, handleFactoryReset);
-    server.on("/systeminfo",         HTTP_GET,  handleSystemInfo);
-    server.on("/setbleenabled",      HTTP_POST, handleSetBleEnabled);
-    server.on("/setlcdmode",         HTTP_POST, handleSetLcdMode);
-    server.on("/setloglevel",        HTTP_POST, handleSetLogLevel);
-    server.on("/setmqttpass",        HTTP_POST, handleSetMqttPass);
-    server.on("/mqttconfig",         HTTP_GET,  handleMqttConfig);
-    server.on("/setmqttbroker",      HTTP_POST, handleSetMqttBroker);
-    server.on("/schedulelist",       HTTP_GET,  handleScheduleList);
-    server.on("/updateAllSchedules", HTTP_POST, handleUpdateAllSchedules);
-    server.on("/cancelSchedule",     HTTP_POST, handleCancelSchedule);
-    server.on("/clearSchedules",     HTTP_POST, handleClearSchedules);
-    server.on("/syncntp",            HTTP_POST, handleSyncNtp);
-    server.on("/history",            HTTP_GET,  handleHistory);
-    server.on("/clearhistory",       HTTP_POST, handleClearHistory);
-    server.on("/logs",               HTTP_GET,  [](){
+    loadWebCredentials();
+
+    // Every route is authenticated. Guarding at registration rather than inside
+    // each handler means a newly added endpoint cannot be left unprotected by
+    // forgetting a line.
+    auto guarded = [](const char* uri, HTTPMethod method, WebServer::THandlerFunction fn) {
+        server.on(uri, method, [fn]() { if (requireAuth()) fn(); });
+    };
+
+    guarded("/",                   HTTP_GET,  handleRoot);
+    guarded("/status",             HTTP_GET,  handleStatus);
+    guarded("/motor",              HTTP_GET,  handleOHMotor);
+    guarded("/undergroundmotor",   HTTP_GET,  handleUGMotor);
+    guarded("/wifiscan",           HTTP_GET,  handleWifiScan);
+    guarded("/wifilist",           HTTP_GET,  handleWifiList);
+    guarded("/addwifi",            HTTP_POST, handleAddWifi);
+    guarded("/setwifipriority",    HTTP_POST, handleSetWifiPriority);
+    guarded("/deletewifi",         HTTP_GET,  handleDeleteWifi);
+    guarded("/setconfig",          HTTP_POST, handleSetConfig);
+    guarded("/reboot",             HTTP_POST, handleReboot);
+    guarded("/factoryreset",       HTTP_POST, handleFactoryReset);
+    guarded("/systeminfo",         HTTP_GET,  handleSystemInfo);
+    guarded("/setbleenabled",      HTTP_POST, handleSetBleEnabled);
+    guarded("/setlcdmode",         HTTP_POST, handleSetLcdMode);
+    guarded("/setloglevel",        HTTP_POST, handleSetLogLevel);
+    guarded("/setmqttpass",        HTTP_POST, handleSetMqttPass);
+    guarded("/mqttconfig",         HTTP_GET,  handleMqttConfig);
+    guarded("/setmqttbroker",      HTTP_POST, handleSetMqttBroker);
+    guarded("/schedulelist",       HTTP_GET,  handleScheduleList);
+    guarded("/updateAllSchedules", HTTP_POST, handleUpdateAllSchedules);
+    guarded("/cancelSchedule",     HTTP_POST, handleCancelSchedule);
+    guarded("/clearSchedules",     HTTP_POST, handleClearSchedules);
+    guarded("/syncntp",            HTTP_POST, handleSyncNtp);
+    guarded("/history",            HTTP_GET,  handleHistory);
+    guarded("/clearhistory",       HTTP_POST, handleClearHistory);
+    guarded("/setwebpass",         HTTP_POST, handleSetWebPass);
+    guarded("/setappass",          HTTP_POST, handleSetApPass);
+
+    // Feature APIs live in src/api/*. They receive the same guard, so a module
+    // cannot publish an unauthenticated endpoint by omission.
+    registerPowerApi(guarded);
+    registerDriveApi(guarded);
+    registerProtectionApi(guarded);
+    registerZoneApi(guarded);
+    guarded("/logs",               HTTP_GET,  [](){
         sendJson(200, getLogsJson(50));
     });
-    server.on("/clearlogs",          HTTP_POST, [](){ clearLogs(); sendOk(); });
+    guarded("/clearlogs",          HTTP_POST, [](){ clearLogs(); sendOk(); });
     server.onNotFound([]() { server.send(404, "text/plain", "Not found"); });
     server.begin();
-    Log(INFO, "[Web] Server started");
+    Log(INFO, "[Web] Server started (authentication required)");
 }
 
 void handleWebClients() {

@@ -29,6 +29,50 @@
 static Preferences wifiPrefs;
 
 // ---------------------------------------------------------------------------
+//  AP / OTA passwords  (build-time defaults, overridable at deployment)
+// ---------------------------------------------------------------------------
+
+String getApPassword() {
+    Preferences p;
+    p.begin(NVS_APCFG_NS, true);
+    String v = p.getString(NVS_KEY_AP_PASS, DEFAULT_AP_PASSWORD);
+    p.end();
+    return v.length() >= 8 ? v : String(DEFAULT_AP_PASSWORD);
+}
+
+String getOtaPassword() {
+    Preferences p;
+    p.begin(NVS_APCFG_NS, true);
+    String v = p.getString(NVS_KEY_OTA_PASS, DEFAULT_OTA_PASSWORD);
+    p.end();
+    return v.length() ? v : String(DEFAULT_OTA_PASSWORD);
+}
+
+bool setApPassword(const String& pass) {
+    if (pass.length() < 8) return false;   // WPA2 minimum
+    Preferences p;
+    p.begin(NVS_APCFG_NS, false);
+    p.putString(NVS_KEY_AP_PASS, pass);
+    p.end();
+    Log(WARN, "[WiFi] AP password changed - restarting hotspot");
+    if (isAPMode) {
+        WiFi.softAPdisconnect(true);
+        WiFi.softAP(DEFAULT_AP_SSID, pass.c_str());
+    }
+    return true;
+}
+
+bool setOtaPassword(const String& pass) {
+    if (pass.length() < 8) return false;
+    Preferences p;
+    p.begin(NVS_APCFG_NS, false);
+    p.putString(NVS_KEY_OTA_PASS, pass);
+    p.end();
+    Log(WARN, "[OTA] Password changed - effective after reboot; update --auth= to match");
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 //  Internal state -- only touched inside the WiFi task (Core 0)
 // ---------------------------------------------------------------------------
 
@@ -162,7 +206,7 @@ static void doSynchronizeTime() {
 static void setupOTA() {
     if (otaReady) return;
     ArduinoOTA.setHostname("agripulse");
-    ArduinoOTA.setPassword("tank1234");
+    ArduinoOTA.setPassword(getOtaPassword().c_str());
     ArduinoOTA.onStart([]() { Log(INFO, "[OTA] Start"); });
     ArduinoOTA.onEnd([]()   { Log(INFO, "[OTA] End");   });
     ArduinoOTA.onError([](ota_error_t e) { Log(ERROR, "[OTA] Error " + String(e)); });
@@ -272,7 +316,7 @@ static void wifiTask(void* /*param*/) {
     WiFi.setAutoReconnect(false);   // disable built-in 3s scan loop — we manage reconnects manually
     esp_wifi_set_country_code("IN", true);  // India: channels 1-13, prevents missing ch13 APs
 
-    WiFi.softAP(DEFAULT_AP_SSID, DEFAULT_AP_PASSWORD);
+    WiFi.softAP(DEFAULT_AP_SSID, getApPassword().c_str());
     vTaskDelay(pdMS_TO_TICKS(200));
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
 
@@ -547,7 +591,7 @@ bool setWifiPriority(const String& ssid, int newPriority) {
 
 void startAPMode() {
     isAPMode = true;
-    WiFi.softAP(DEFAULT_AP_SSID, DEFAULT_AP_PASSWORD);
+    WiFi.softAP(DEFAULT_AP_SSID, getApPassword().c_str());
 }
 
 void stopAPMode() {
