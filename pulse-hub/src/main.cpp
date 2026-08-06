@@ -21,6 +21,7 @@
 #include "TouchSwitch.h"
 #include "MQTTManager.h"
 #include "ADE7758.h"
+#include "MotorProtection.h"
 
 // =============================================================================
 //                              GLOBAL STATE DEFINITIONS
@@ -95,6 +96,7 @@ void setup() {
     // 3-phase energy meter. Returns false if the meter doesn't answer; the rest
     // of the system still runs, but current/voltage protection stays disarmed.
     adeInit();
+    protInit();
 
     // LoRa for OH tank remote node
     initLoRa();

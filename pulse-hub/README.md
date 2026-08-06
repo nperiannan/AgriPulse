@@ -63,6 +63,32 @@ Pin columns differ per board revision — use the column matching your build env
 > The ADE7758 sits in a **mains-referenced ground domain** (`ADE_GND ≠ GND`);
 > the ISO6741 and optocoupler maintain that isolation. Never bridge the grounds.
 
+Board sources (schematic, PDF, photos) live in
+[harwaredetails/esp32_4g_gateway](harwaredetails/esp32_4g_gateway). The pin
+table above was extracted from that EasyEDA netlist, not read off the drawing.
+
+## Open Items
+
+Tracked so they are not lost between sessions.
+
+### Blocking commissioning
+
+| # | Item | Impact |
+| --- | --- | --- |
+| 1 | **CT ratio unknown** — not yet purchased | Driver stays `calibrated = false`, so **overload and dry-run trips are disarmed**. Enter the ratio to arm them. |
+| 2 | **Voltage scaling defaults come from the previous board** | The 1 MΩ divider tolerance is board-specific; readings are approximate until recalibrated per unit. |
+| 3 | **Local web UI has no authentication** — `isAuthenticated()` returns `true` | Anyone on the LAN or the AP can command the motor. Must be fixed before the hub can throw a 3-phase contactor from a web request. |
+
+### Nice to have
+
+| # | Item |
+| --- | --- |
+| 4 | Obtain the original `ade7758/` Arduino library to cross-check the register map, phase-sequence logic and interrupt handling. |
+| 5 | Folder is spelled `harwaredetails` (missing a `d`). Rename to `hardwaredetails` when convenient. |
+| 6 | Partition table maps only 4 MB of the module's 16 MB flash. |
+| 7 | `IO39–42` are the JTAG lines (`TCK/TDO/TDI/TMS`) yet v1 uses `40/41` for touch and `42` for float. Consistent with the board revision notes, but the first place to look if touch or float misbehave. |
+| 8 | Credentials committed in the deploy scripts and the `tank1234` AP password should be rotated and moved out of git. |
+
 ## Build & Flash
 
 **Prerequisites:** PlatformIO Core or PlatformIO IDE extension.

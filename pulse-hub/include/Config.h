@@ -140,6 +140,59 @@
 #define NVS_KEY_ADE_CALIBRATED "cal_done"
 
 // =============================================================================
+//                          MOTOR PROTECTION THRESHOLDS
+// =============================================================================
+// Defaults are deliberately conservative placeholders.  Every one of these is
+// installation-specific and runtime-settable; a 5 HP pump is roughly 7-8 A FLA
+// with ~45-50 A DOL inrush, but the real numbers must be measured on site.
+//
+// Voltage is measured phase-to-neutral (nominal 230 V).
+#define PROT_VOLT_LOW_DEFAULT      180.0f
+#define PROT_VOLT_HIGH_DEFAULT     270.0f
+
+// Current needs BOTH limits.  On a centrifugal pump load tracks flow, so a dry
+// run or a closed discharge shows up as LOW current, not high — over-current
+// alone would miss the most common way to destroy the pump.
+#define PROT_AMP_LOW_DEFAULT         2.0f
+#define PROT_AMP_HIGH_DEFAULT       10.0f
+
+#define PROT_FREQ_LOW_DEFAULT       47.0f
+#define PROT_FREQ_HIGH_DEFAULT      53.0f
+
+// Sustained phase-current imbalance, as a fraction of the mean.  This is how
+// single-phasing is caught while running.
+#define PROT_IMBALANCE_MAX_DEFAULT   0.15f
+
+// Blanking windows, measured from the moment the motor is confirmed running.
+// Over-current must ignore DOL inrush; under-current must additionally wait for
+// flow to establish, or every healthy start looks like a dry run.
+#define PROT_INRUSH_BLANK_MS_DEFAULT    5000UL
+#define PROT_DRYRUN_BLANK_MS_DEFAULT   20000UL
+
+// A trip condition must persist this long before acting, so a single noisy
+// sample cannot stop a motor.  Phase loss is exempt — that one trips fast.
+#define PROT_TRIP_DEBOUNCE_MS_DEFAULT   3000UL
+
+// Pulse verification for the two-wire latching starter.
+#define PROT_START_CONFIRM_MS_DEFAULT   8000UL   // current must appear by now
+#define PROT_STOP_CONFIRM_MS_DEFAULT    5000UL   // current must be gone by now
+
+#define NVS_PROT_NS             "motor_prot"
+#define NVS_KEY_PROT_VLOW       "v_low"
+#define NVS_KEY_PROT_VHIGH      "v_high"
+#define NVS_KEY_PROT_ILOW       "i_low"
+#define NVS_KEY_PROT_IHIGH      "i_high"
+#define NVS_KEY_PROT_FLOW       "f_low"
+#define NVS_KEY_PROT_FHIGH      "f_high"
+#define NVS_KEY_PROT_IMBAL      "imbal"
+#define NVS_KEY_PROT_INRUSH     "blank_in"
+#define NVS_KEY_PROT_DRYRUN     "blank_dry"
+#define NVS_KEY_PROT_DEBOUNCE   "debounce"
+#define NVS_KEY_PROT_STARTCONF  "conf_on"
+#define NVS_KEY_PROT_STOPCONF   "conf_off"
+#define NVS_KEY_PROT_ARM_UNCAL  "arm_uncal"
+
+// =============================================================================
 //                              UG TANK FLOAT SWITCH PINS
 // =============================================================================
 // Single-pin wiring (3-wire float switch):
