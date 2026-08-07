@@ -267,6 +267,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
           and an LCD backpack use the same chip and are otherwise indistinguishable on the bus — declaring an
           address here keeps it from ever being mistaken for the LCD, regardless of what else is connected at
           boot.</span></span></span>
+        <button class="btn-s" id="btnI2cExpFocus">+ Declare</button>
       </div>
       <div id="i2cExpList"></div>
       <div class="row" style="border:none;flex-wrap:wrap">

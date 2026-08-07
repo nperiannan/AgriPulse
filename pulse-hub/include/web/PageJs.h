@@ -1185,6 +1185,14 @@ bind('btnHistClear',function(){UI.act('/clearhistory',{},'History cleared').then
 bind('btnAddWifi',function(){
   UI.act('/addwifi',{ssid:UI.el('wSsid').value,password:UI.el('wPass').value},'Network added').then(Net.load);});
 bind('btnI2cExpAdd',I2cExp.add);
+// Matches the header-button pattern the other Network cards use (Scan,
+// Save), but "add" genuinely needs an address typed in first — this just
+// gets the user there instead of pretending it can add on a single click.
+bind('btnI2cExpFocus',function(){
+  var el=UI.el('i2cexp_addr');
+  el.scrollIntoView({block:'center',behavior:'smooth'});
+  el.focus();
+});
 UI.el('i2cExpList').addEventListener('click',function(e){
   var b=e.target.closest('button[data-i2cdel]');
   if(!b)return;
