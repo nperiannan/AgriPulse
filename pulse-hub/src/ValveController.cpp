@@ -126,30 +126,44 @@ static bool i2cPresent(uint8_t addr) {
     return Wire.endTransmission() == 0;
 }
 
-// An MCP23017 is distinguishable from a PCF8574 at the same address: it has
-// addressable registers, so IODIRA reads back 0x00 after being written and
-// survives a write/read round trip. A PCF8574 has no register file and simply
-// returns its port state, so the round trip does not hold.
+// This used to write 0x00 to IODIRA and check whether it "stuck" on
+// readback, on the theory that a PCF8574 (no register file, a raw byte
+// write just sets its port) couldn't replicate that. It's wrong: an
+// UNLOADED PCF8574 — nothing connected to its P0-P7 pins yet, exactly the
+// bench-testing case this whole board-declaration feature exists for —
+// trivially "remembers" 0x00 too, purely because nothing else is driving
+// those floating pins. Round-tripping ANY value this way just reflects
+// what was last written on a PCF8574, register semantics or not; it proves
+// nothing. This is what got a real PCF8574T module misidentified as an
+// MCP23017 here.
+//
+// The real, hardware-enforced tell: IOCON bit0 is permanently unimplemented
+// on a genuine MCP23017 and always reads back 0, no matter what is written
+// to it — a dumb port expander has no way to fake a bit that refuses to
+// stick regardless of load. Only bit0 is touched (never BANK/MIRROR/etc —
+// flipping BANK on a real MCP23017 would silently break every other
+// register address this driver assumes), so this is safe even against a
+// genuine MCP23017 already in normal use.
+#define MCP_IOCON 0x0A
 static bool looksLikeMcp23017(uint8_t addr) {
     Wire.beginTransmission(addr);
-    Wire.write(MCP_IODIRA);
-    Wire.write(0x00);                     // set port A to all-outputs
+    Wire.write(MCP_IOCON);
+    Wire.write(0x01);                     // only the unimplemented bit0; every other IOCON bit stays 0
     if (Wire.endTransmission() != 0) return false;
 
     Wire.beginTransmission(addr);
-    Wire.write(MCP_IODIRA);
+    Wire.write(MCP_IOCON);
     if (Wire.endTransmission(false) != 0) return false;
     if (Wire.requestFrom(addr, (uint8_t)1) != 1) return false;
     uint8_t v = Wire.read();
 
-    if (v != 0x00) return false;          // did not stick — not a register file
-
-    // Put it back the way we found it before deciding either way.
+    // Restore IOCON to its power-on default either way.
     Wire.beginTransmission(addr);
-    Wire.write(MCP_IODIRA);
-    Wire.write(0xFF);
+    Wire.write(MCP_IOCON);
+    Wire.write(0x00);
     Wire.endTransmission();
-    return true;
+
+    return v == 0x00;   // bit0 refused to stick -> a real register file (MCP23017)
 }
 
 // ---------------------------------------------------------------------------
