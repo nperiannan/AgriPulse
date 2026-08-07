@@ -79,7 +79,13 @@ ul.chk li:first-child{border-top:none}
 .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--bd);flex-wrap:wrap}
 .row:first-child{border-top:none}
 .lb{flex:1;min-width:128px;font-size:12.5px}
-.rv{flex:1;min-width:0;font-size:12.5px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* min-width:0 is what actually matters here: it lets the value shrink below
+   its own single-line width instead of the whole span being forced onto a
+   new physical row by .row's flex-wrap. No nowrap/ellipsis — truncating hid
+   real values (SSID+IP, MAC) that people need to actually read; wrapping its
+   own text onto a second line, still on the same row as the label, is the
+   fix that keeps everything both visible and aligned. */
+.rv{flex:1;min-width:0;font-size:12.5px;text-align:right}
 .reserve{min-height:46px}
 .inp{background:var(--card2);color:var(--tx);border:1px solid var(--bd2);border-radius:6px;
  padding:6px 9px;font-size:12.5px;width:90px}
@@ -93,8 +99,8 @@ select.inp{width:auto}
 .pane{display:none}.pane.on{display:block}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:8px;
  font-size:13px;font-weight:600;display:none;z-index:60;color:#fff}
-pre.log{background:var(--card2);border:1px solid var(--bd);border-radius:7px;padding:9px;font-size:11px;
- max-height:300px;overflow:auto;margin:0;white-space:pre-wrap}
+pre.log{background:var(--card2);border:1px solid var(--bd);border-radius:7px;padding:11px 13px;font-size:11.5px;
+ line-height:1.55;min-height:140px;max-height:300px;overflow:auto;margin:0;white-space:pre-wrap;color:var(--tx2)}
 .hist{max-height:440px;overflow:auto}
 .hist table{width:100%;border-collapse:collapse;font-size:12.5px}
 .hist th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);

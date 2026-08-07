@@ -290,12 +290,14 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <div id="i2cScanResult" class="reserve"></div>
     </div>
     <div class="card full">
-      <div class="ct">Log</div>
-      <pre id="logs" class="log">Loading&hellip;</pre>
-      <div class="brow" style="margin-top:8px">
-        <button class="btn-s" id="btnLogRefresh">Refresh</button>
-        <button class="btn-s" id="btnLogClear">Clear</button>
+      <div class="ct" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span>Log</span>
+        <span class="brow" style="margin:0">
+          <button class="btn-s" id="btnLogRefresh">Refresh</button>
+          <button class="btn-s" id="btnLogClear">Clear</button>
+        </span>
       </div>
+      <pre id="logs" class="log">Loading&hellip;</pre>
     </div>
    </div>
   </div>

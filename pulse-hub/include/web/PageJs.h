@@ -795,14 +795,13 @@ var Sys={
     Api.get('/status').then(function(d){
       UI.el('sysFw').innerHTML=
         Sys.row('Firmware',d.fwVersion)+
-        Sys.row('Transmitter FW',d.txFw)+
         Sys.row('Uptime',Sys.uptime(d.uptime))+
-        Sys.row('Last restart',d.resetReason)+
         Sys.row('Chip',d.chipModel+' rev '+d.chipRev)+
         Sys.row('CPU',d.cpuCores+' cores @ '+d.cpuFreqMHz+' MHz')+
         Sys.row('Core 0','WiFi / OTA / NTP')+
         Sys.row('Core 1','Control loop')+
         Sys.row('MAC',d.macAddress)+
+        Sys.row('Bluetooth MAC',d.btMacAddress)+
         Sys.row('ESP-IDF',d.sdkVersion);
 
       var heapPct=d.heapSize?Math.round(100*(d.heapSize-d.freeHeap)/d.heapSize):0;

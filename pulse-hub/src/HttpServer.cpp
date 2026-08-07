@@ -1,4 +1,5 @@
 #include "HttpServer.h"
+#include <esp_mac.h>
 #include "Logger.h"
 #include "Config.h"
 #include "Globals.h"
@@ -245,6 +246,18 @@ static void handleStatus() {
     doc["flashSpeedHz"]      = (uint32_t)ESP.getFlashChipSpeed();
     doc["sdkVersion"]        = ESP.getSdkVersion();
     doc["macAddress"]        = WiFi.macAddress();
+    // esp_read_mac() reads the factory-programmed BT MAC straight from efuse —
+    // it does not require the Bluetooth controller to actually be initialised,
+    // which this firmware never does (no BLE stack built in). Formatted the
+    // same way WiFi.macAddress() already comes back, for a direct comparison.
+    {
+        uint8_t btMac[6] = {0};
+        char btMacStr[18];
+        esp_read_mac(btMac, ESP_MAC_BT);
+        snprintf(btMacStr, sizeof(btMacStr), "%02X:%02X:%02X:%02X:%02X:%02X",
+                 btMac[0], btMac[1], btMac[2], btMac[3], btMac[4], btMac[5]);
+        doc["btMacAddress"] = String(btMacStr);
+    }
     doc["resetReason"]       = resetReasonStr();
     doc["i2cSda"]            = SDA_PIN;
     doc["i2cScl"]            = SCL_PIN;
