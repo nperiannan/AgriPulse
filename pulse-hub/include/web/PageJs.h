@@ -206,6 +206,7 @@ var Zones={
       var h='';
       for(var i=0;i<d.zones.length;i++){var z=d.zones[i];
         var blocked=!z.open&&full;
+        var usedBy=Zones.programLinks[i];   // populated by Zones.load(), see below
         h+='<div class="z'+(z.open?' on':'')+'">'
           +'<div class="zn">'+z.name
             // The diverter sends borewell water to the well for storage rather
@@ -213,7 +214,7 @@ var Zones={
             +(z.kind==='diverter'?'<div class="dt">to well</div>':'')+'</div>'
           +'<div class="zs">'+(z.open
               ? (Zones.mmss(z.left_s)+' left'+(z.source==='program'?' \u00b7 program':''))
-              : 'closed')+'</div>'
+              : (usedBy?('in '+usedBy.join(', ')):'closed'))+'</div>'
           +'<button class="btn-s zbtn'+(z.open?' btn-d':'')+'" data-zid="'+i+'" data-zact="'
             +(z.open?'stop':'run')+'"'+(blocked?' disabled title="Valve limit reached"':'')+'>'
             +(z.open?'Stop':'Run')+'</button>'
@@ -223,7 +224,23 @@ var Zones={
       if(!Zones.namesLoaded){Zones.namesLoaded=true;Zones.renderNames(d.zones);}
     }).catch(function(){});
   },
-  load:function(){return Zones.poll();},
+  programLinks:{},   // {zoneId: ['Program A', ...]} \u2014 which enabled programs water this zone
+  load:function(){
+    // The one-time /api/programs fetch lives here (Zones tab open / rename
+    // save), never in the continuous poll cycle \u2014 that cycle already caused
+    // real problems once (see PageJs.h header) when it grew unbounded.
+    return Api.get('/api/programs').then(function(pd){
+      Zones.programLinks={};
+      (pd.programs||[]).forEach(function(p){
+        if(!p.enabled)return;
+        (p.zoneMin||[]).forEach(function(min,zid){
+          if(min<=0)return;
+          if(!Zones.programLinks[zid])Zones.programLinks[zid]=[];
+          Zones.programLinks[zid].push(p.name);
+        });
+      });
+    }).catch(function(){}).then(Zones.poll);
+  },
   cmd:function(o){return UI.act('/api/zones/cmd',o,null).then(Zones.poll);}
 };
 
@@ -261,51 +278,6 @@ var Protection={
     var o={};o[calField]=newScale;
     UI.act('/api/calibration',o,'Scale updated to '+newScale.toPrecision(6))
       .then(function(){Protection.load();});
-  }
-};
-
-/* ---- Schedules ----
-   GET /schedulelist always returns exactly MAX_SCHEDULES (10) slots, enabled
-   or not — the backend has no concept of "add"/"remove", only "edit slot N
-   and toggle it on". The UI mirrors that: 10 fixed rows, Save all posts every
-   slot back in one shot (matches /updateAllSchedules' bulk-replace contract),
-   rather than pretending schedules can be dynamically added/removed. */
-var MAX_SCHEDULES=10;   // mirrors Scheduler.h — bump both together if it ever changes
-var Sched={
-  load:function(){
-    Api.get('/schedulelist').then(function(d){
-      // handleScheduleList() in HttpServer.cpp returns a bare JSON array
-      // (doc.to<JsonArray>()), not {schedules:[...]} — reading d.schedules
-      // here silently produced an empty list on every load.
-      var a=Array.isArray(d)?d:[];
-      var h='';
-      for(var i=0;i<a.length;i++){var s=a[i]||{};
-        h+='<div class="row">'
-          +'<span class="lb">#'+(i+1)+'</span>'
-          +'<input type="checkbox" id="sch_en_'+i+'"'+(s.enabled?' checked':'')+' title="Enabled">'
-          +'<select id="sch_mt_'+i+'" class="inp">'
-            +'<option value="0"'+(s.motorType==0?' selected':'')+'>Overhead tank</option>'
-            +'<option value="1"'+(s.motorType==1?' selected':'')+'>Underground tank</option>'
-          +'</select>'
-          +'<input type="time" id="sch_time_'+i+'" class="inp" value="'+(s.time||'00:00')+'">'
-          +'<input type="number" id="sch_dur_'+i+'" class="inp" min="1" max="240" value="'+(s.duration||10)+'"><span class="u">min</span>'
-          +(s.running?' <span class="badge b-ok">running</span>':'')
-          +'</div>';
-      }
-      UI.el('schedWrap').innerHTML=h||'<div class="hint">Unavailable.</div>';
-    }).catch(function(){UI.el('schedWrap').innerHTML='<div class="hint">Unavailable.</div>';});
-  },
-  save:function(){
-    var o={};
-    for(var i=0;i<MAX_SCHEDULES;i++){
-      var en=UI.el('sch_en_'+i);
-      if(!en)continue;   // fewer than MAX_SCHEDULES rows rendered (load() failed/empty)
-      if(en.checked) o['enabled'+i]='1';
-      o['motorType'+i]=UI.el('sch_mt_'+i).value;
-      o['time'+i]=UI.el('sch_time_'+i).value||'00:00';
-      o['duration'+i]=UI.el('sch_dur_'+i).value||'10';
-    }
-    UI.act('/updateAllSchedules',o,'Schedules saved').then(Sched.load);
   }
 };
 
@@ -400,6 +372,40 @@ var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var Progs={
   zoneNames:[],
   hhmm:function(m){var h=Math.floor(m/60),mi=m%60;return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi;},
+  // {zoneId: minutes} for zones actually in this program (server still stores
+  // all 8 as zoneMin[], 0 = not used — this just presents that as an explicit
+  // add/remove list instead of eight always-visible boxes).
+  minMap:function(p){var m={};for(var z=0;z<p.zoneMin.length;z++){if(p.zoneMin[z]>0)m[z]=p.zoneMin[z];}return m;},
+  zoneName:function(z){var zn=Progs.zoneNames[z];return zn?(zn.name+(zn.kind==='diverter'?' (to well)':'')):('Zone '+(z+1));},
+  zoneRowsHtml:function(pid,map){
+    var h='';
+    Object.keys(map).map(Number).sort(function(a,b){return a-b;}).forEach(function(z){
+      h+='<div class="row" data-zrow="'+z+'"><span class="lb">'+Progs.zoneName(z)+'</span>'
+        +'<input class="inp n" type="number" min="1" max="240" id="pg_zm_'+pid+'_'+z+'" value="'+map[z]+'">'
+        +'<span class="u">min</span>'
+        +'<button class="btn-s btn-d" data-zremove="'+z+'" data-pid="'+pid+'">Remove</button></div>';
+    });
+    var opts='';
+    for(var z=0;z<Progs.zoneNames.length;z++){
+      if(map[z]!==undefined)continue;
+      opts+='<option value="'+z+'">'+Progs.zoneName(z)+'</option>';
+    }
+    h+=opts?('<div class="row"><select class="inp" id="pg_addzone_'+pid+'">'+opts+'</select>'
+      +'<button class="btn-s" data-zadd="1" data-pid="'+pid+'">+ Add zone</button></div>')
+      :'<div class="hint">Every zone is already in this program.</div>';
+    return h;
+  },
+  readZoneBox:function(pid){
+    var box=UI.el('pg_zonesbox_'+pid), m={};
+    if(!box)return m;
+    box.querySelectorAll('[data-zrow]').forEach(function(row){
+      var z=parseInt(row.dataset.zrow,10);
+      var inp=row.querySelector('input[type=number]');
+      var v=inp?parseInt(inp.value,10):1;
+      m[z]=(v>0?v:1);
+    });
+    return m;
+  },
   load:function(){
     return Promise.all([Api.get('/api/programs'), Api.get('/api/zones')]).then(function(r){
       var d=r[0], zd=r[1];
@@ -451,12 +457,9 @@ var Progs={
         +'<span class="lb">Every</span><input class="inp" type="number" min="1" max="30" id="pg_iv_'+p.id+'" value="'+((p.interval)||2)+'"><span class="u">days</span></div>'
       +'<div class="row"><span class="lb">Water source</span>'
         +'<select class="inp" id="pg_src_'+p.id+'"><option value="well">Well Motor</option><option value="bore">Bore Motor</option></select></div>'
-      +'<div style="padding:8px 0 0;border-top:1px solid var(--bd)"><div class="hint" style="margin-bottom:6px">Zone run times &mdash; zones run one after another</div>';
-    for(var z=0;z<Progs.zoneNames.length;z++){var zn=Progs.zoneNames[z];
-      h+='<div class="row"><span class="lb">'+zn.name+(zn.kind==='diverter'?' (to well)':'')+'</span>'
-        +'<input class="inp n" type="number" min="0" max="240" id="pg_zm_'+p.id+'_'+z+'" value="'+p.zoneMin[z]+'"><span class="u">min</span></div>';
-    }
-    h+='</div>'
+      +'<div style="padding:8px 0 0;border-top:1px solid var(--bd)"><div class="hint" style="margin-bottom:6px">Zones in this program &mdash; run one after another, in the order added</div>'
+      +'<div id="pg_zonesbox_'+p.id+'">'+Progs.zoneRowsHtml(p.id,Progs.minMap(p))+'</div>'
+      +'</div>'
       +'<div class="brow">'
         +'<button class="btn" id="btnProgSave_'+p.id+'">Save program</button>'
         +(running?'<button class="btn-s btn-d" id="btnProgStop_'+p.id+'">Stop</button>'
@@ -481,9 +484,8 @@ var Progs={
     var mask=0;
     for(var wd=0;wd<7;wd++){var cb=UI.el('pg_day_'+id+'_'+wd);if(cb&&cb.checked)mask|=(1<<wd);}
     o.dayMask=mask;
-    for(var z=0;z<Progs.zoneNames.length;z++){
-      var el=UI.el('pg_zm_'+id+'_'+z); if(el)o['zm'+z]=el.value;
-    }
+    var m=Progs.readZoneBox(id);
+    for(var z=0;z<Progs.zoneNames.length;z++) o['zm'+z]=(m[z]!==undefined?m[z]:0);
     UI.act('/api/programs/save',o,'Saved').then(Progs.load);
   },
   run:function(id){UI.act('/api/programs/cmd',{cmd:'run',id:id},'Running').then(Progs.load);},
@@ -505,9 +507,13 @@ var Hist={
       }
       var a=d.records||[];
       if(!a.length){UI.el('histWrap').innerHTML='<div class="hint">No events recorded yet.</div>';return;}
-      var h='<table><thead><tr><th>Time</th><th>Event</th><th>OH</th><th>UG</th><th>Reason</th></tr></thead><tbody>';
+      var h='<table><thead><tr><th>Time</th><th>Event</th><th>Detail</th><th>Reason</th></tr></thead><tbody>';
       for(var i=0;i<a.length;i++){var r=a[i];
-        h+='<tr><td>'+r.time+'</td><td>'+r.ev+'</td><td>'+r.oh+'</td><td>'+r.ug+'</td><td>'+(r.rsnStr||'')+'</td></tr>';}
+        // Zone events carry zoneId instead of oh/ug tank state (see History.h) —
+        // "Zone N" rather than a name, since a renamed zone shouldn't rewrite
+        // what an old record meant at the time.
+        var detail=(r.zoneId!==undefined)?('Zone '+(r.zoneId+1)):(r.oh+' / '+r.ug);
+        h+='<tr><td>'+r.time+'</td><td>'+r.ev+'</td><td>'+detail+'</td><td>'+(r.rsnStr||'')+'</td></tr>';}
       h+='</tbody></table>';
       UI.el('histWrap').innerHTML=h;
     }).catch(function(){UI.el('histWrap').innerHTML='<div class="hint">Unavailable.</div>';});
@@ -604,7 +610,7 @@ var Sys={
   }
 };
 
-UI.panels={'p-prot':Protection,'p-prog':Progs,'p-sched':Sched,'p-hist':Hist,'p-net':Net,'p-sys':Sys};
+UI.panels={'p-prot':Protection,'p-prog':Progs,'p-zones':Zones,'p-hist':Hist,'p-net':Net,'p-sys':Sys};
 
 /* ---- wiring ---- */
 function bind(id,fn){var e=UI.el(id);if(e)e.onclick=fn;}
@@ -632,9 +638,6 @@ bind('btnQcVR',function(){Protection.quickCal('qc_v_r','qc_live_v_r','v_a');});
 bind('btnQcVY',function(){Protection.quickCal('qc_v_y','qc_live_v_y','v_b');});
 bind('btnQcVB',function(){Protection.quickCal('qc_v_b','qc_live_v_b','v_c');});
 bind('btnQcI', function(){Protection.quickCal('qc_i','qc_live_i','i');});
-bind('btnSchedSave',Sched.save);
-bind('btnSchedCancel',function(){UI.act('/cancelSchedule',{},'Active schedule cancelled').then(Sched.load);});
-bind('btnSchedClear',function(){UI.act('/clearSchedules',{},'All schedules cleared').then(Sched.load);});
 // Delegated, like wifiNets: the zone grid is re-rendered on every poll.
 UI.el('zones').addEventListener('click',function(e){
   var b=e.target.closest('button[data-zact]');
@@ -661,6 +664,21 @@ bind('btnProgDefaultsSave',function(){
     seasonalPct:UI.el('pd_seasonal').value,rainDelayDays:UI.el('pd_rain').value},'Defaults saved').then(Progs.load);
 });
 UI.el('progCards').addEventListener('click',function(e){
+  var addBtn=e.target.closest('button[data-zadd]');
+  if(addBtn){
+    var pid=addBtn.dataset.pid, sel=UI.el('pg_addzone_'+pid);
+    if(!sel||sel.value==='')return;
+    var m=Progs.readZoneBox(pid); m[parseInt(sel.value,10)]=10;
+    UI.el('pg_zonesbox_'+pid).innerHTML=Progs.zoneRowsHtml(pid,m);
+    return;
+  }
+  var rmBtn=e.target.closest('button[data-zremove]');
+  if(rmBtn){
+    var pid2=rmBtn.dataset.pid;
+    var m2=Progs.readZoneBox(pid2); delete m2[parseInt(rmBtn.dataset.zremove,10)];
+    UI.el('pg_zonesbox_'+pid2).innerHTML=Progs.zoneRowsHtml(pid2,m2);
+    return;
+  }
   var b=e.target.closest('button[id]'); if(!b)return;
   var m=b.id.match(/^btnProg(Save|Run|Stop|Delete)_(\d+)$/); if(!m)return;
   var id=parseInt(m[2],10);

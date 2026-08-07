@@ -230,8 +230,9 @@ void loop() {
     updateDisplay();
     stage("display");
 
-    // --- Scheduler ---
-    checkSchedules();
+    // --- Scheduler: retired 2026-08-07, Programs (zone-based) replaces it.
+    // checkSchedules() is deliberately not called - any schedule left saved
+    // from before is now fully inert, not just hidden from the UI.
     stage("sched");
 
     // --- MQTT ---

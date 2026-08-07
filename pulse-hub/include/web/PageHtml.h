@@ -36,7 +36,6 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
     <button data-p="p-zones">Zones</button>
     <button data-p="p-prot">Protection</button>
     <button data-p="p-prog">Programs</button>
-    <button data-p="p-sched">Schedules</button>
     <button data-p="p-hist">History</button>
     <button data-p="p-net">Network</button>
     <button data-p="p-sys">System</button>
@@ -196,22 +195,6 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
     <div id="progCards" class="grid full" style="grid-column:1/-1"></div>
     <div class="brow full" style="grid-column:1/-1"><button class="btn-s" id="btnProgAdd">+ Add program</button></div>
    </div>
-  </div>
-
-  <div id="p-sched" class="pane">
-    <div class="card full">
-      <div class="ct">Irrigation Schedules</div>
-      <div class="hint" style="margin-bottom:9px">
-        Schedules target the motor (Overhead/Underground tank relay logic) &mdash; up to 10 slots.
-        Per-zone scheduling arrives with the valve board.
-      </div>
-      <div id="schedWrap">Loading&hellip;</div>
-      <div class="brow" style="margin-top:9px">
-        <button class="btn" id="btnSchedSave">Save all</button>
-        <button class="btn-s" id="btnSchedCancel">Cancel active</button>
-        <button class="btn-s btn-d" id="btnSchedClear">Clear all</button>
-      </div>
-    </div>
   </div>
 
   <div id="p-hist" class="pane">
