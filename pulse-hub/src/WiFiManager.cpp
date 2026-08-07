@@ -245,6 +245,18 @@ static void handleAddNetwork(const char* ssid, const char* password) {
             networks[i].password = password;
             saveNetworks();
             Log(INFO, "[WiFi] Updated password for: " + String(ssid));
+            // Correcting a password (e.g. after a scan-and-join typo) must
+            // retry promptly too — without this, a wrong first attempt burns
+            // through WIFI_MAX_ATTEMPTS_PER_NET and lands in the 15-minute
+            // cooldown, and the corrected password then sits ignored for the
+            // rest of that window because only the "brand new network" branch
+            // below used to reset the state machine. Found 2026-08-07.
+            if (WiFi.status() != WL_CONNECTED) {
+                smTryIdx       = 0;
+                smTryAttempts  = 0;
+                smInCooldown   = false;
+                smNextActionMs = millis() + 1000;
+            }
             return;
         }
     }

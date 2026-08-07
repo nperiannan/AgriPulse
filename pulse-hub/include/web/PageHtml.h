@@ -196,10 +196,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       </div>
     </div>
     <div id="progArea" class="grid full" style="grid-column:1/-1;display:contents">
-      <div class="card full" style="grid-column:1/-1">
-        <div class="ct">Saved Programs</div>
-        <div id="progList"></div>
-      </div>
+      <div class="ct" style="grid-column:1/-1;margin:6px 0 -4px">Saved Programs</div>
+      <div id="progList" style="display:contents"></div>
       <div id="progEditors" class="grid full" style="grid-column:1/-1"></div>
     </div>
    </div>

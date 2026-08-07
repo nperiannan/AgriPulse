@@ -245,13 +245,23 @@ var Zones={
         // in Programs.cpp) \u2014 so the cumulative offset computed here is the
         // real clock time that zone will actually run at, not a guess.
         var seq=[]; (p.zoneMin||[]).forEach(function(min,zid){if(min>0)seq.push(zid);});
+        if(!seq.length)return;   // nothing added to this program yet - genuinely nothing to link
         var offset={}, acc=0;
         seq.forEach(function(zid){offset[zid]=acc; acc+=p.zoneMin[zid];});
-        (p.starts||[]).forEach(function(startMin){
+        // A program can be enabled with zones added but no start time typed in
+        // yet \u2014 that's a real, common in-progress state, not "nothing to show".
+        // [null] keeps the zone linked (win stays null -> "no start time set")
+        // instead of the whole program silently vanishing from the Zones tab.
+        var starts=(p.starts&&p.starts.length)?p.starts:[null];
+        starts.forEach(function(startMin){
           seq.forEach(function(zid){
-            var s=(startMin+offset[zid])%1440, e=(s+p.zoneMin[zid])%1440;
+            var win=null;
+            if(startMin!==null){
+              var s=(startMin+offset[zid])%1440, e=(s+p.zoneMin[zid])%1440;
+              win=Progs.hhmm(s)+'\u2013'+Progs.hhmm(e);
+            }
             if(!Zones.programLinks[zid])Zones.programLinks[zid]=[];
-            Zones.programLinks[zid].push({name:p.name,win:Progs.hhmm(s)+'\u2013'+Progs.hhmm(e)});
+            Zones.programLinks[zid].push({name:p.name,win:win});
           });
         });
       });
@@ -444,20 +454,43 @@ var Progs={
       Progs.render();
     }).catch(function(){UI.el('progList').innerHTML='<div class="hint">Unavailable.</div>';});
   },
-  // Compact list (name, status, quick actions) always visible; the full
-  // editor for a program only appears once you press Edit on it — this is
-  // the two-tier layout from the original design, not a flat wall of cards.
+  esc:function(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');},
+  dayModeShort:function(p){
+    switch(Number(p.dayMode)){
+      case 0:
+        var names=[]; for(var wd=0;wd<7;wd++){if(p.dayMask&(1<<wd))names.push(DAYS[wd]);}
+        return names.length===7?'Every day':(names.length?names.join(','):'No days set');
+      case 1: return 'Odd dates';
+      case 2: return 'Even dates';
+      case 3: return 'Every '+(p.interval||2)+' days';
+      default: return '?';
+    }
+  },
+  // Each program is its own small card (matches Program B/C in the original
+  // design) — not a text row in a shared list. The full editor for a program
+  // only appears once you press Edit on it.
   render:function(){
     var d=Progs.lastData; if(!d)return;
     var lh='';
     for(var i=0;i<d.programs.length;i++){var p=d.programs[i];
-      lh+='<div class="row"><span class="lb">'+p.name+' '
+      var zoneNames=[];
+      for(var z=0;z<p.zoneMin.length;z++){if(p.zoneMin[z]>0)zoneNames.push(Progs.zoneName(z));}
+      var next=Progs.nextRunText(p);
+      lh+='<div class="card">'
+        +'<div class="ct">'+Progs.esc(p.name)+' '
         +(p.enabled?'<span class="badge b-ok">enabled</span>':'<span class="badge b-off">disabled</span>')
-        +(p.running?' <span class="badge b-ok">running &mdash; zone '+(p.currentZone+1)+'</span>':'')
-        +'</span>'
-        +'<button class="btn-s" data-ptoggle="'+p.id+'">'+(p.enabled?'Disable':'Enable')+'</button>'
-        +'<button class="btn-s" data-pedit="'+p.id+'">'+(Progs.openIds[p.id]?'Close':'Edit')+'</button>'
-        +'<button class="btn-s btn-d" data-pdel="'+p.id+'">Delete</button></div>';
+        +(p.running?' <span class="badge b-ok">running</span>':'')
+        +'</div>'
+        +'<div class="row"><span class="lb">Status</span><span>'+(p.enabled?(next||'enabled, no start time set'):'disabled')+'</span></div>'
+        +'<div class="row"><span class="lb">Start times</span><span>'
+          +(p.starts&&p.starts.length?p.starts.map(Progs.hhmm).join(', '):'&mdash;')+'</span></div>'
+        +'<div class="row"><span class="lb">Days</span><span>'+Progs.dayModeShort(p)+'</span></div>'
+        +'<div class="row"><span class="lb">Zones</span><span>'+(zoneNames.length?zoneNames.join(', '):'&mdash;')+'</span></div>'
+        +'<div class="brow">'
+          +'<button class="btn-s" data-ptoggle="'+p.id+'">'+(p.enabled?'Disable':'Enable')+'</button>'
+          +'<button class="btn-s" data-pedit="'+p.id+'">'+(Progs.openIds[p.id]?'Close':'Edit')+'</button>'
+          +'<button class="btn-s btn-d" data-pdel="'+p.id+'">Delete</button>'
+        +'</div></div>';
     }
     UI.el('progList').innerHTML=lh||'<div class="hint">No programs yet — press + Add program.</div>';
 
@@ -517,11 +550,49 @@ var Progs={
     }
     return null;
   },
-  totalRunHtml:function(map,firstStart){
+  // Returns bare inner text/HTML — caller supplies the wrapping element (the
+  // #pg_total_ID span in card(), refreshed live by refreshBoxAndTotal()).
+  totalRunHtml:function(map,firstStart,endMin){
     var total=0; Object.keys(map).forEach(function(k){total+=map[k];});
-    if(!total)return '';
+    if(firstStart!==undefined&&firstStart!==null&&endMin!==undefined&&endMin!==null&&endMin>firstStart){
+      var win=endMin-firstStart;
+      return total+' of '+win+' min used'+(total<win?' — '+(win-total)+' min free':'');
+    }
+    if(!total)return '&mdash;';
     var ends=(firstStart!==undefined&&firstStart!==null)?(' &middot; ends '+Progs.hhmm((firstStart+total)%1440)):'';
-    return '<div class="row"><span class="lb">Total run</span><span>'+total+' min'+ends+'</span></div>';
+    return total+' min'+ends;
+  },
+  parseHHMM:function(s){
+    var parts=String(s||'').split(':');
+    if(parts.length<2)return null;
+    var h=parseInt(parts[0],10), m=parseInt(parts[1],10);
+    return (isNaN(h)||isNaN(m))?null:(h*60+m);
+  },
+  // Best-effort reconstruction for re-opening a saved program: end time isn't
+  // stored (it's a client-side planning aid, not a field the firmware knows
+  // about), so infer it from start + however much zone time is already saved.
+  guessEndTime:function(p){
+    if(!p.starts||!p.starts.length)return '';
+    var total=0; (p.zoneMin||[]).forEach(function(m){total+=m;});
+    return total?Progs.hhmm((p.starts[0]+total)%1440):'';
+  },
+  // n integers summing exactly to `total`, as equal as integer division
+  // allows — front-loaded remainder so nothing is lost to rounding.
+  splitEven:function(total,n){
+    var base=Math.floor(total/n), rem=total-base*n, out=[];
+    for(var i=0;i<n;i++)out.push(base+(i<rem?1:0));
+    return out;
+  },
+  // Re-renders both the zone box and the Total-run line for one program from
+  // whatever is currently in the DOM — called after every add/remove/edit so
+  // neither goes stale relative to the other.
+  refreshBoxAndTotal:function(pid,map){
+    var startEl=UI.el('pg_start_'+pid), endEl=UI.el('pg_end_'+pid);
+    var startMin=startEl?Progs.parseHHMM(startEl.value):null;
+    var endMin=endEl?Progs.parseHHMM(endEl.value):null;
+    UI.el('pg_zonesbox_'+pid).innerHTML=Progs.zoneRowsHtml(pid,map,startMin);
+    var totalEl=UI.el('pg_total_'+pid);
+    if(totalEl)totalEl.innerHTML=Progs.totalRunHtml(map,startMin,endMin);
   },
   card:function(p){
     var running=p.running;
@@ -534,9 +605,12 @@ var Progs={
       +'</div>'
       +'<div class="row"><input type="checkbox" id="pg_en_'+p.id+'"'+(p.enabled?' checked':'')+'> <span class="lb">Enabled</span>'
         +'<input class="inp w" id="pg_name_'+p.id+'" value="'+p.name.replace(/"/g,'&quot;')+'" maxlength="15" style="max-width:160px"></div>'
-      +'<div class="row"><span class="lb">Start times</span>'
-        +'<input class="inp w" id="pg_starts_'+p.id+'" placeholder="05:30, 17:00" value="'
-        +p.starts.map(Progs.hhmm).join(', ')+'"></div>'
+      +'<div class="row"><span class="lb">Start time <b style="color:var(--err)">*</b></span>'
+        +'<input class="inp" type="time" id="pg_start_'+p.id+'" value="'
+        +(p.starts&&p.starts.length?Progs.hhmm(p.starts[0]):'')+'"></div>'
+      +'<div class="row"><span class="lb">End time</span>'
+        +'<input class="inp" type="time" id="pg_end_'+p.id+'" value="'+Progs.guessEndTime(p)+'">'
+        +'<div class="hint">Optional. Set before adding zones to split the window between them automatically; leave blank to type each zone’s minutes yourself.</div></div>'
       +'<div class="row"><span class="lb">Watering days</span>'
         +'<select class="inp" id="pg_daymode_'+p.id+'" onchange="Progs.showDayFields('+p.id+',this.value)">'
         +'<option value="0">Specific days</option><option value="1">Odd dates</option>'
@@ -554,7 +628,8 @@ var Progs={
       +'<div style="padding:8px 0 0;border-top:1px solid var(--bd)"><div class="hint" style="margin-bottom:6px">Zones in this program &mdash; run one after another, in the order added</div>'
       +'<div id="pg_zonesbox_'+p.id+'">'+Progs.zoneRowsHtml(p.id,Progs.minMap(p),p.starts&&p.starts[0])+'</div>'
       +'</div>'
-      +Progs.totalRunHtml(Progs.minMap(p),p.starts&&p.starts[0])
+      +'<div class="row"><span class="lb">Total run</span><span id="pg_total_'+p.id+'">'
+        +Progs.totalRunHtml(Progs.minMap(p),p.starts&&p.starts[0],Progs.parseHHMM(Progs.guessEndTime(p)))+'</span></div>'
       +'<div class="brow">'
         +'<button class="btn" id="btnProgSave_'+p.id+'">Save program</button>'
         +(running?'<button class="btn-s btn-d" id="btnProgStop_'+p.id+'">Stop</button>'
@@ -568,10 +643,12 @@ var Progs={
     UI.el('pg_interval_'+id).style.display=(mode==='3')?'flex':'none';
   },
   save:function(id){
+    var startVal=UI.el('pg_start_'+id).value;
+    if(!startVal){UI.toast('Start time is required','err');return;}
     var o={id:id};
     if(UI.el('pg_en_'+id).checked) o.enabled='1';
     o.name=UI.el('pg_name_'+id).value;
-    o.starts=UI.el('pg_starts_'+id).value;
+    o.starts=startVal;   // backend still accepts a CSV of up to 4; one value is one program run/day
     o.dayMode=UI.el('pg_daymode_'+id).value;
     o.interval=UI.el('pg_iv_'+id).value;
     o.source=UI.el('pg_src_'+id).value;
@@ -777,17 +854,28 @@ UI.el('progArea').addEventListener('click',function(e){
   if(addBtn){
     var pid=addBtn.dataset.pid, sel=UI.el('pg_addzone_'+pid);
     if(!sel||sel.value==='')return;
-    var m=Progs.readZoneBox(pid); m[parseInt(sel.value,10)]=10;
-    var pr=Progs.findProgram(pid);
-    UI.el('pg_zonesbox_'+pid).innerHTML=Progs.zoneRowsHtml(pid,m,pr&&pr.starts&&pr.starts[0]);
+    var newZ=parseInt(sel.value,10);
+    var m=Progs.readZoneBox(pid);
+    var startMin=Progs.parseHHMM(UI.el('pg_start_'+pid).value);
+    var endMin=Progs.parseHHMM(UI.el('pg_end_'+pid).value);
+    if(startMin!==null&&endMin!==null&&endMin>startMin){
+      // Window is set: re-split it evenly across every zone including the new
+      // one, overwriting whatever was there — this is the "add a zone, existing
+      // ones re-divide" behaviour, not a one-time default.
+      var ids=Object.keys(m).map(Number); ids.push(newZ); ids.sort(function(a,b){return a-b;});
+      var shares=Progs.splitEven(endMin-startMin,ids.length);
+      m={}; ids.forEach(function(zid,idx){m[zid]=shares[idx];});
+    } else {
+      m[newZ]=10;   // no window set - manual entry, same as before
+    }
+    Progs.refreshBoxAndTotal(pid,m);
     return;
   }
   var rmBtn=e.target.closest('button[data-zremove]');
   if(rmBtn){
     var pid2=rmBtn.dataset.pid;
     var m2=Progs.readZoneBox(pid2); delete m2[parseInt(rmBtn.dataset.zremove,10)];
-    var pr2=Progs.findProgram(pid2);
-    UI.el('pg_zonesbox_'+pid2).innerHTML=Progs.zoneRowsHtml(pid2,m2,pr2&&pr2.starts&&pr2.starts[0]);
+    Progs.refreshBoxAndTotal(pid2,m2);
     return;
   }
   var b=e.target.closest('button[id]'); if(!b)return;
@@ -796,6 +884,37 @@ UI.el('progArea').addEventListener('click',function(e){
   if(m[1]==='Save')Progs.save(id);
   else if(m[1]==='Run')Progs.run(id);
   else Progs.stop(id);
+});
+// Live cap: typing a zone's minutes past what the start/end window leaves
+// free clamps it back down immediately, rather than silently allowing an
+// over-committed program through to Save.
+UI.el('progArea').addEventListener('input',function(e){
+  var zm=e.target.id&&e.target.id.match(/^pg_zm_(\d+)_(\d+)$/);
+  if(zm){
+    var pid=zm[1];
+    var startMin=Progs.parseHHMM(UI.el('pg_start_'+pid).value);
+    var endMin=Progs.parseHHMM(UI.el('pg_end_'+pid).value);
+    if(startMin===null||endMin===null||endMin<=startMin)return;   // no window - nothing to cap against
+    var win=endMin-startMin;
+    var box=Progs.readZoneBox(pid);
+    var sum=0; Object.keys(box).forEach(function(k){sum+=box[k];});
+    if(sum>win){
+      var edited=parseInt(e.target.value,10)||0;
+      var others=sum-edited;
+      e.target.value=Math.max(1,win-others);
+      UI.toast('Zones can’t exceed the '+win+' min window','err');
+    }
+    var totalEl=UI.el('pg_total_'+pid);
+    if(totalEl)totalEl.innerHTML=Progs.totalRunHtml(Progs.readZoneBox(pid),startMin,endMin);
+    return;
+  }
+  var se=e.target.id&&e.target.id.match(/^pg_(start|end)_(\d+)$/);
+  if(se){
+    // Start/end changing doesn't touch already-set zone minutes on its own
+    // (only Add re-splits) — just refresh the displayed windows and total so
+    // they reflect the new clock times.
+    Progs.refreshBoxAndTotal(se[2],Progs.readZoneBox(se[2]));
+  }
 });
 bind('btnProgAdd',Progs.add);
 bind('btnHistRefresh',Hist.load);
