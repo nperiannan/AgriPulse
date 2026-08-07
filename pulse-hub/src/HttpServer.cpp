@@ -181,6 +181,7 @@ static void handleStatus() {
     doc["txLost"]            = isTransmitterLost();
     doc["loraRSSI"]          = getLoraRSSI();
     doc["loraSNR"]           = getLoraSNR();
+    doc["loraFreqMHz"]       = LORA_FREQUENCY;
     doc["lastLoraReceived"]  = lastLoraReceivedTime > 0
                                ? String((millis() - lastLoraReceivedTime) / 1000) + "s ago"
                                : "Never";

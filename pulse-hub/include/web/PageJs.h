@@ -818,6 +818,7 @@ var Sys={
         Sys.row('WiFi mode',mode)+
         Sys.row('AP (hotspot)','AgriPulse @ '+d.apIP)+
         Sys.row('STA (uplink)',d.wifiConnected?(d.wifiSSID+' @ '+d.wifiIP):'not connected')+
+        Sys.row('LoRa',d.loraOk?(d.loraFreqMHz+' MHz &middot; RSSI '+Math.round(d.loraRSSI)+' dBm'):'not detected')+
         Sys.row('Bluetooth','disabled — not built into this firmware');
 
       var none=!d.rtcOk&&!d.lcdAddr&&!d.eepromOk;

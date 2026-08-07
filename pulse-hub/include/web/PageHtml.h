@@ -34,8 +34,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div class="tabs">
     <button class="on" data-p="p-ctl">Control</button>
     <button data-p="p-zones">Zones</button>
-    <button data-p="p-prot">Protection</button>
     <button data-p="p-prog">Programs</button>
+    <button data-p="p-prot">Protection</button>
     <button data-p="p-hist">History</button>
     <button data-p="p-net">Network</button>
     <button data-p="p-sys">System</button>
