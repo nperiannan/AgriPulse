@@ -92,6 +92,14 @@ static int           smTryAttempts     = 0;
 static unsigned long smNextActionMs    = 0;
 static bool          smInCooldown      = false;
 static unsigned long smCooldownUntilMs = 0;
+
+// A totally empty async scan result (found<=0) has been observed to be
+// intermittent in AP+STA mode — the manual /wifiscan blocking scan reliably
+// finds the same networks the async pre-connect gate below sometimes misses
+// entirely. Retry a few empty scans before believing "nothing in range" and
+// paying the 15-minute cooldown for what may just have been a flaky scan.
+#define WIFI_EMPTY_SCAN_MAX_RETRIES 3
+static int smEmptyScanRetries = 0;
 static bool          smScanPending     = false; // async scan in progress
 
 // NTP
@@ -449,6 +457,7 @@ static void wifiTask(void* /*param*/) {
                         if (found <= 0) {
                             Log(WARN, "[WiFi] Scan found no networks");
                         } else {
+                            smEmptyScanRetries = 0;   // real results this time
                             for (int s = 0; s < found; s++) {
                                 for (int n = 0; n < networkCount; n++) {
                                     if (WiFi.SSID(s) == networks[n].ssid) anySeen = true;
@@ -460,7 +469,14 @@ static void wifiTask(void* /*param*/) {
                         }
                         WiFi.scanDelete();
 
-                        if (!anySeen) {
+                        if (found <= 0 && smEmptyScanRetries < WIFI_EMPTY_SCAN_MAX_RETRIES) {
+                            smEmptyScanRetries++;
+                            Log(WARN, "[WiFi] Empty scan (" + String(smEmptyScanRetries) + "/"
+                                      + String(WIFI_EMPTY_SCAN_MAX_RETRIES) + ") - retrying before giving up");
+                            WiFi.scanNetworks(true, true);
+                            smScanPending = true;
+                        } else if (!anySeen) {
+                            smEmptyScanRetries = 0;
                             // Associating with an absent SSID holds the shared radio for the
                             // whole attempt window, which makes the AP's web UI unreachable.
                             // Skip straight to cooldown rather than burning three of those.
@@ -470,6 +486,7 @@ static void wifiTask(void* /*param*/) {
                             smTryAttempts     = 0;
                             Log(WARN, "[WiFi] No configured SSID in range - cooling down, AP stays responsive");
                         } else {
+                            smEmptyScanRetries = 0;
                             smTryAttempts++;
                             Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
                                       + " -> " + networks[smTryIdx].ssid);

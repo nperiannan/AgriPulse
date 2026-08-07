@@ -207,13 +207,17 @@ var Zones={
       for(var i=0;i<d.zones.length;i++){var z=d.zones[i];
         var blocked=!z.open&&full;
         var usedBy=Zones.programLinks[i];   // [{name,win}, ...], populated by Zones.load()
-        // Tile is small \u2014 full "Odd Days 30 Min 05:30\u201305:45, ...\u00d7N" would
-        // overflow it. Show just the program name(s), full windows in the
-        // hover tooltip (names may contain spaces, so join on an entry
-        // object rather than splitting a formatted string back apart).
-        var usedNames=usedBy?usedBy.map(function(u){return Zones.esc(u.name);})
-          .filter(function(n,idx,arr){return arr.indexOf(n)===idx;}):null;
+        // Start/stop time shown inline now, not hover-only \u2014 a tooltip is
+        // invisible on touch and easy to miss even on desktop. First entry's
+        // window is the primary line; anything past that collapses to "+N
+        // more" (a zone in several enabled programs, or one program with
+        // several start times) rather than overflowing the tile.
         var usedTitle=usedBy?Zones.esc(usedBy.map(function(u){return u.name+' '+u.win;}).join(', ')):'';
+        var usedLine=null;
+        if(usedBy&&usedBy.length){
+          usedLine=Zones.esc(usedBy[0].name)+(usedBy[0].win?(' '+usedBy[0].win):'');
+          if(usedBy.length>1)usedLine+=' +'+(usedBy.length-1)+' more';
+        }
         h+='<div class="z'+(z.open?' on':'')+'"'+(usedBy?' title="'+usedTitle+'"':'')+'>'
           +'<div class="zn">'+z.name
             // The diverter sends borewell water to the well for storage rather
@@ -221,7 +225,7 @@ var Zones={
             +(z.kind==='diverter'?'<div class="dt">to well</div>':'')+'</div>'
           +'<div class="zs">'+(z.open
               ? (Zones.mmss(z.left_s)+' left'+(z.source==='program'?' \u00b7 program':''))
-              : (usedNames?('in '+usedNames.join(', ')):'closed'))+'</div>'
+              : (usedLine?('in '+usedLine):'closed'))+'</div>'
           +'<button class="btn-s zbtn'+(z.open?' btn-d':'')+'" data-zid="'+i+'" data-zact="'
             +(z.open?'stop':'run')+'"'+(blocked?' disabled title="Valve limit reached"':'')+'>'
             +(z.open?'Stop':'Run')+'</button>'
