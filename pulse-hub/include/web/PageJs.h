@@ -149,31 +149,22 @@ var Motor={
 
 /* ---- Zones ---- */
 var Zones={
-  namesLoaded:false,   // populate the rename inputs once, never again on poll —
-                       // Zones.poll() runs every ~3s regardless of tab, and
-                       // rebuilding these inputs mid-edit would erase typing.
+  lastZonesData:null,   // last /api/zones response — the manager section
+                        // (below) reads this instead of its own fetch, and
+                        // only ever (re)renders on an explicit open/refresh,
+                        // never on poll()'s 3s tick, so it can never erase
+                        // someone mid-remap or mid-add.
   mmss:function(s){var m=Math.floor(s/60),r=s%60;return m+':'+(r<10?'0':'')+r;},
   esc:function(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');},
-  renderNames:function(zones){
-    var h='';
-    for(var i=0;i<zones.length;i++){
-      h+='<div class="row"><span class="lb">'+(zones[i].kind==='diverter'?'Diverter':'Zone '+(i+1))
-        +'</span><input class="inp w" id="zname_'+i+'" maxlength="16" value="'
-        +Zones.esc(zones[i].name)+'"></div>';
-    }
-    UI.el('zoneNames').innerHTML=h;
-  },
-  saveNames:function(){
-    var reqs=[];
-    for(var i=0;i<8;i++){
-      var el=UI.el('zname_'+i); if(!el)continue;
-      var v=el.value.trim(); if(!v){UI.toast('Zone '+(i+1)+' name cannot be blank','err');return;}
-      reqs.push(UI.act('/api/zones/cmd',{cmd:'rename',id:i,name:v},null));
-    }
-    Promise.all(reqs).then(function(){UI.toast('Zone names saved','ok');Zones.poll();});
+  chLabel:function(ch,d){
+    var b=Math.floor(ch/8), local=ch%8;
+    var board=(d.boards||[]).filter(function(x){return x.board===b;})[0];
+    return board?('ch '+ch+' ('+board.backend+' @'+board.addr+', local '+local+')')
+                :('ch '+ch+' (no board)');
   },
   poll:function(){
     return Api.get('/api/zones').then(function(d){
+      Zones.lastZonesData=d;
       var n=UI.el('zoneNote');
       // Simulated is a working mode, not a failure: the interlocks and timers
       // all run, nothing is energised. Say that rather than "layout only".
@@ -193,8 +184,9 @@ var Zones={
         sb.textContent='Watering stopped'+(d.stop_zone?(' on '+d.stop_zone):'')+' \u2014 '+d.stop_reason;}
       else sb.style.display='none';
 
-      var badgeText=d.open_count+' of '+d.max_open+' open \u00b7 '+d.backend+
-        (d.addr?(' @ 0x'+d.addr.toString(16).toUpperCase()):'');
+      var boardSummary=d.fully_simulated?'simulated'
+        :(d.boards||[]).map(function(x){return x.backend+' @'+x.addr;}).join(', ')||'no board';
+      var badgeText=d.open_count+' of '+d.max_open+' open \u00b7 '+boardSummary;
       var badgeClass='badge '+(d.bus_fault?'b-err':d.open_count?'b-ok':'b-off');
       var b=UI.el('zoneBadge'); b.textContent=badgeText; b.className=badgeClass;
       var bc=UI.el('zoneBadgeCtl'); if(bc){bc.textContent=badgeText; bc.className=badgeClass;}
@@ -205,8 +197,8 @@ var Zones={
       var full=d.open_count>=d.max_open;
       var h='';
       for(var i=0;i<d.zones.length;i++){var z=d.zones[i];
-        var blocked=!z.open&&full;
-        var usedBy=Zones.programLinks[i];   // [{name,win}, ...], populated by Zones.load()
+        var blocked=(!z.open&&full)||!z.active;
+        var usedBy=Zones.programLinks[z.id];   // [{name,win}, ...], populated by Zones.load()
         // Start/stop time shown inline now, not hover-only \u2014 a tooltip is
         // invisible on touch and easy to miss even on desktop. First entry's
         // window is the primary line; anything past that collapses to "+N
@@ -218,22 +210,119 @@ var Zones={
           usedLine=Zones.esc(usedBy[0].name)+(usedBy[0].win?(' '+usedBy[0].win):'');
           if(usedBy.length>1)usedLine+=' +'+(usedBy.length-1)+' more';
         }
-        h+='<div class="z'+(z.open?' on':'')+'"'+(usedBy?' title="'+usedTitle+'"':'')+'>'
+        h+='<div class="z'+(z.open?' on':'')+(z.active?'':' inactive')+'"'
+            +(usedBy?' title="'+usedTitle+'"':'')+'>'
           +'<div class="zn">'+z.name
             // The diverter sends borewell water to the well for storage rather
             // than to a field \u2014 worth marking so it isn't run expecting crop.
-            +(z.kind==='diverter'?'<div class="dt">to well</div>':'')+'</div>'
+            +(z.kind==='diverter'?'<div class="dt">to well</div>':'')
+            +(z.active?'':'<div class="dt" style="color:var(--err)">inactive \u2014 no board</div>')
+            +'</div>'
           +'<div class="zs">'+(z.open
               ? (Zones.mmss(z.left_s)+' left'+(z.source==='program'?' \u00b7 program':''))
               : (usedLine?('in '+usedLine):'closed'))+'</div>'
-          +'<button class="btn-s zbtn'+(z.open?' btn-d':'')+'" data-zid="'+i+'" data-zact="'
-            +(z.open?'stop':'run')+'"'+(blocked?' disabled title="Valve limit reached"':'')+'>'
+          +'<button class="btn-s zbtn'+(z.open?' btn-d':'')+'" data-zid="'+z.id+'" data-zact="'
+            +(z.open?'stop':'run')+'"'+(blocked?' disabled title="'
+              +(z.active?'Valve limit reached':'Zone is inactive \u2014 see Manage zones')+'"':'')+'>'
             +(z.open?'Stop':'Run')+'</button>'
           +'</div>';}
       UI.el('zones').innerHTML=h;
-
-      if(!Zones.namesLoaded){Zones.namesLoaded=true;Zones.renderNames(d.zones);}
     }).catch(function(){});
+  },
+  // --- Manage zones: add / rename / remap / delete -----------------------
+  // Deliberately NOT wired into poll()'s 3s tick \u2014 see lastZonesData above.
+  // Opens fresh each time the <details> is expanded, and after every action
+  // inside it, so it is always current without ever fighting a live edit.
+  loadManager:function(){
+    return Api.get('/api/zones').then(function(d){
+      Zones.lastZonesData=d;
+      Zones.renderManager(d);
+    });
+  },
+  renderManager:function(d){
+    var bh=d.fully_simulated
+      ? 'No valve board detected \u2014 every channel below is a simulated placeholder for bench testing.'
+      : (d.boards&&d.boards.length
+          ? d.boards.length+' board(s): '+d.boards.map(function(x){return x.backend+' @'+x.addr+' (ch '
+              +(x.board*8)+'-'+(x.board*8+7)+')';}).join(', ')
+          : 'No board detected and nothing is simulated \u2014 this should not happen; press Rescan.');
+    UI.el('zoneBoards').textContent=bh;
+
+    var lh='';
+    for(var i=0;i<d.zones.length;i++){var z=d.zones[i];
+      lh+='<div class="row"><span class="lb">'+Zones.esc(z.name)
+        +(z.kind==='diverter'?' <span class="dt">(diverter)</span>':'')
+        +(z.active?'':' <span class="badge b-err">inactive</span>')
+        +'</span><span class="dt">'+Zones.chLabel(z.channel,d)+'</span>'
+        +'<button class="btn-s" data-zmrename="'+z.id+'">Rename</button>'
+        +'<button class="btn-s" data-zmremap="'+z.id+'">Remap</button>'
+        +'<button class="btn-s btn-d" data-zmdel="'+z.id+'"'
+          +(z.open?' disabled title="Stop it first"':'')+'>Delete</button>'
+        +'</div>';}
+    UI.el('zoneMgrList').innerHTML=lh||'<div class="hint">No zones yet.</div>';
+
+    // Channel picker for the "+ Add zone" row: every channel not already
+    // claimed by an existing zone.
+    var taken={}; d.zones.forEach(function(z){taken[z.channel]=true;});
+    var opts='';
+    for(var ch=0; ch<d.valve_channels; ch++){
+      if(taken[ch])continue;
+      opts+='<option value="'+ch+'">'+Zones.chLabel(ch,d)+'</option>';
+    }
+    var sel=UI.el('zn_channel');
+    sel.innerHTML=opts||'<option value="">No free channels</option>';
+  },
+  addZone:function(){
+    var name=UI.el('zn_name').value.trim();
+    if(!name){UI.toast('Enter a zone name','err');return;}
+    var kind=UI.el('zn_kind').value;
+    var ch=UI.el('zn_channel').value;
+    if(ch===''){UI.toast('No free channel to assign','err');return;}
+    UI.act('/api/zones/cmd',{cmd:'create',name:name,kind:kind,channel:ch},'Zone added').then(function(r){
+      if(!r||!r.ok)return;
+      UI.el('zn_name').value='';
+      Zones.loadManager();
+      Zones.load();
+    });
+  },
+  renameZone:function(id){
+    var d=Zones.lastZonesData; if(!d)return;
+    var z=d.zones.filter(function(x){return x.id===id;})[0]; if(!z)return;
+    var name=window.prompt('New name for "'+z.name+'"', z.name);
+    if(name===null)return;
+    name=name.trim();
+    if(!name){UI.toast('Name cannot be blank','err');return;}
+    UI.act('/api/zones/cmd',{cmd:'rename',id:id,name:name},'Renamed').then(function(){
+      Zones.loadManager();
+      Zones.load();
+    });
+  },
+  remapZone:function(id){
+    var d=Zones.lastZonesData; if(!d)return;
+    var z=d.zones.filter(function(x){return x.id===id;})[0]; if(!z)return;
+    if(z.open){UI.toast('Stop the zone before remapping it','err');return;}
+    var taken={}; d.zones.forEach(function(x){if(x.id!==id)taken[x.channel]=true;});
+    var free=[];
+    for(var ch=0; ch<d.valve_channels; ch++) if(!taken[ch]) free.push(ch);
+    if(!free.length){UI.toast('No free channel to remap to','err');return;}
+    var list=free.map(function(ch){return ch+': '+Zones.chLabel(ch,d);}).join('\n');
+    var ans=window.prompt('Remap "'+z.name+'" (currently ch '+z.channel+') to which channel number?\n\n'+list, String(z.channel));
+    if(ans===null)return;
+    var ch=parseInt(ans,10);
+    if(isNaN(ch)||free.indexOf(ch)<0){UI.toast('Not a free channel number','err');return;}
+    UI.act('/api/zones/cmd',{cmd:'remap',id:id,channel:ch},'Remapped').then(function(){
+      Zones.loadManager();
+      Zones.load();
+    });
+  },
+  deleteZone:function(id){
+    var d=Zones.lastZonesData; if(!d)return;
+    var z=d.zones.filter(function(x){return x.id===id;})[0]; if(!z)return;
+    if(!window.confirm('Delete zone "'+z.name+'"? This cannot be undone; any program using it will just skip it.'))return;
+    UI.act('/api/zones/cmd',{cmd:'delete',id:id},'Deleted').then(function(){
+      Zones.loadManager();
+      Zones.load();
+    });
   },
   programLinks:{},   // {zoneId: ['Program A 05:30\u201305:45', ...]} \u2014 only enabled programs
   // One card per ENABLED program \u2014 same shape as the Programs tab's summary
@@ -922,8 +1011,19 @@ UI.el('scanWrap').addEventListener('click',function(e){
   Net.join(decodeURIComponent(b.dataset.join), b.dataset.open==='1');
 });
 bind('btnZonesStopAll',function(){Zones.cmd({cmd:'stopall'});});
-bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanned').then(Zones.poll);});
-bind('btnZoneNamesSave',Zones.saveNames);
+bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanned').then(function(){
+  Zones.poll();
+  if(UI.el('zoneMgrDetails').open)Zones.loadManager();
+});});
+bind('btnZoneAdd',Zones.addZone);
+UI.el('zoneMgrDetails').addEventListener('toggle',function(){
+  if(this.open)Zones.loadManager();
+});
+UI.el('zoneMgrList').addEventListener('click',function(e){
+  var rn=e.target.closest('button[data-zmrename]'); if(rn){Zones.renameZone(parseInt(rn.dataset.zmrename,10));return;}
+  var rm=e.target.closest('button[data-zmremap]');  if(rm){Zones.remapZone(parseInt(rm.dataset.zmremap,10));return;}
+  var dl=e.target.closest('button[data-zmdel]');    if(dl&&!dl.disabled){Zones.deleteZone(parseInt(dl.dataset.zmdel,10));return;}
+});
 UI.el('zoneProgArea').addEventListener('click',function(e){
   var tgl=e.target.closest('button[data-zptoggle]'); if(tgl){Zones.progToggle(tgl.dataset.zptoggle);return;}
   var edit=e.target.closest('button[data-zpedit]');   if(edit){Zones.progEdit(edit.dataset.zpedit);return;}

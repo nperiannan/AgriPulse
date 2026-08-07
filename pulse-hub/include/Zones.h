@@ -9,7 +9,7 @@
 // Irrigation zones, and the safety rules that govern them.
 //
 // This is the layer that decides what is *allowed*; ValveController only knows
-// how to flip bits.
+// how to flip bits on possibly-several boards.
 //
 // THE CONTROL CHAIN, in the order the real plant requires:
 //
@@ -36,11 +36,24 @@
 // free on that condition), which is what the changeover contactor enforces.
 // The WELL motor is the default — it has more pressure. There is no separate
 // master valve: the motor itself is the source.
+//
+// ZONE MODEL — dynamic, not a fixed set of 8:
+//   Zones live in a capacity-ZONE_MAX array (zoneCount() is the live number in
+//   use). Each zone owns one global ValveController channel (0..VALVE_CHANNELS-1,
+//   i.e. board*8+localChannel — see ValveController.h). A deleted zone is
+//   tombstoned (exists=false), NEVER shifted and NEVER its id reused: Programs
+//   reference zones by raw id in ProgramState.zoneMin[], and shifting ids out
+//   from under a saved program would silently rewater the wrong ground. The
+//   freed channel becomes available to a newly-created zone immediately, even
+//   though the old id itself stays retired.
+//   A zone whose channel currently has no board behind it (board unplugged, or
+//   never fitted) is `active=false` — the UI marks it inactive and offers
+//   remap/delete rather than letting it silently no-op on Run.
 
-#define ZONE_COUNT           8
+#define ZONE_MAX             32    // capacity; zoneCount() is the live number
 #define ZONE_MAX_CONCURRENT  3     // 5 HP head limit
-#define ZONE_NAME_MAX       17     // 16 chars + NUL, matches the LCD width
-#define ZONE_MAX_MINUTES   240
+#define ZONE_NAME_MAX        17    // 16 chars + NUL, matches the LCD width
+#define ZONE_MAX_MINUTES     240
 
 // Not every valve waters a field. The borewell has a diverter downstream of it
 // that either feeds the zone valves or sends water into the well to be stored
@@ -70,6 +83,7 @@ enum ZoneReject : uint8_t {
     ZONE_REJ_METER,             // meter unhealthy/uncalibrated: start unverifiable
     ZONE_REJ_MOTOR_FAULT,       // drive in fault or welded, needs clearing first
     ZONE_REJ_BAD_DURATION,
+    ZONE_REJ_INACTIVE,          // zone's mapped channel has no board behind it right now
 };
 
 // Why watering last stopped on its own. Worth distinguishing: a dry run and a
@@ -88,6 +102,9 @@ enum ZoneStopCause : uint8_t {
 struct ZoneState {
     char       name[ZONE_NAME_MAX];
     ZoneKind   kind;
+    bool       exists;        // false = deleted/tombstoned slot — id is never reused
+    bool       active;        // false = mapped channel has no board behind it right now
+    uint8_t    channel;       // global ValveController channel this zone drives
     bool       open;
     ZoneSource source;
     uint16_t   totalSec;      // requested run length
@@ -111,12 +128,32 @@ ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src);
 void zoneStop(uint8_t id, uint8_t histReason = REASON_MANUAL_WEB);
 void zonesStopAll(ZoneStopCause cause);
 
+// zoneCount()/zoneExists() — iterate 0..zoneCount()-1, skip !zoneExists(i) for
+// anything user-facing (a tombstoned id can never be open, so the interlock
+// loops in Zones.cpp don't need the exists check — they already gate on .open).
+uint8_t zoneCount();
+bool    zoneExists(uint8_t id);
+
 const ZoneState& zoneGet(uint8_t id);
 uint8_t          zoneOpenCount();
 uint16_t         zoneSecondsLeft(uint8_t id);
 
 bool zoneSetName(uint8_t id, const String& name);
-void zonesSaveNames();
+
+// Create/delete/remap — the dynamic zone list. All three refuse while the
+// zone (or, for create, the target channel) is open, and refuse a channel
+// already claimed by another existing zone — two zones sharing one relay
+// would make zoneOpenCount()'s accounting (and so ZONE_MAX_CONCURRENT) wrong
+// against what is physically energised.
+// Returns the new zone's id, or 0xFF if ZONE_MAX is reached / channel is taken.
+uint8_t zoneCreate(const String& name, ZoneKind kind, uint8_t channel);
+bool    zoneDelete(uint8_t id);                         // refuses if open
+bool    zoneSetChannel(uint8_t id, uint8_t channel);     // refuses if open or channel taken
+
+// Re-probe which zones' channels currently have a board behind them. Call
+// after a valve board rescan (zonesRescanBoard() below does this for you).
+void zonesRefreshActive();
+void zonesRescanBoard();   // valveRescan() + zonesRefreshActive(), in that order
 
 const char* zoneRejectName(ZoneReject r);
 const char* zoneStopCauseName(ZoneStopCause c);

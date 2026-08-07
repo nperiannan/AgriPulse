@@ -25,7 +25,7 @@ struct ProgramState {
     WaterDayMode dayMode;
     uint8_t      dayMask;        // WDAY_SPECIFIC
     uint8_t      intervalDays;   // WDAY_INTERVAL
-    uint16_t     zoneMin[ZONE_COUNT];   // minutes per zone, 0 = skip
+    uint16_t     zoneMin[ZONE_MAX];   // minutes per zone slot, 0 = skip/unused
     MotorId      source;         // which motor this program waters from
 
     // Runtime (not persisted)

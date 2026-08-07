@@ -9,7 +9,11 @@
 // POST /api/programs/cmd  — run / stop / defaults
 
 static void getPrograms() {
-    StaticJsonDocument<2048> doc;
+    // Heap-allocated, not stack: up to PROGRAM_MAX(12) programs, each carrying
+    // a ZONE_MAX(32)-element zoneMin[] array — ArduinoJson's DOM overhead for
+    // that alone is ~12*32*16 =~ 6KB, well past what a StaticJsonDocument on
+    // the stack should hold. Freed the moment this request finishes.
+    DynamicJsonDocument doc(16384);
     ProgramDefaults& d = programDefaults();
     JsonObject def = doc.createNestedObject("defaults");
     def["source"]  = d.source == MOTOR_BORE ? "bore" : "well";
@@ -32,7 +36,7 @@ static void getPrograms() {
         o["interval"] = p.intervalDays;
         o["source"]   = p.source == MOTOR_BORE ? "bore" : "well";
         JsonArray zm = o.createNestedArray("zoneMin");
-        for (uint8_t z = 0; z < ZONE_COUNT; z++) zm.add(p.zoneMin[z]);
+        for (uint8_t z = 0; z < ZONE_MAX; z++) zm.add(p.zoneMin[z]);
         o["running"]     = p.running;
         o["currentZone"] = p.currentZone;
     }
@@ -80,7 +84,7 @@ static void postProgramSave() {
     if (apiServer.hasArg("interval")) p.intervalDays = (uint8_t)constrain(apiServer.arg("interval").toInt(), 1, 30);
     if (apiServer.hasArg("source")) p.source = (apiServer.arg("source") == "bore") ? MOTOR_BORE : MOTOR_WELL;
 
-    for (uint8_t z = 0; z < ZONE_COUNT; z++) {
+    for (uint8_t z = 0; z < ZONE_MAX; z++) {
         String key = "zm" + String(z);
         if (apiServer.hasArg(key)) {
             int v = apiServer.arg(key).toInt();

@@ -6,22 +6,23 @@
 #include "MotorProtection.h"
 #include "History.h"
 #include <Preferences.h>
+#include <ArduinoJson.h>
 
-#define NVS_ZONE_NS   "zones"
-#define NVS_KEY_NAMES "names"
+#define NVS_ZONE_NS      "zones"
+#define NVS_KEY_ZONES_V2 "zjson"   // {name,kind,channel,deleted}[] — current format
+#define NVS_KEY_NAMES    "names"   // old newline-separated-names format; read once for migration
 
-static ZoneState zones[ZONE_COUNT];
+static ZoneState zones[ZONE_MAX];
+static uint8_t   liveCount = 0;      // zones[0..liveCount-1] are populated (some may be !exists)
 
-// Default names. The last channel is the borewell diverter, not a field zone:
-// it sends borewell water into the well to be stored for later instead of out
-// to the crop. It is named rather than left as "Zone 8" because treating it as
-// an ordinary zone is exactly the mistake that would water nothing.
-static const char* DEFAULT_NAMES[ZONE_COUNT] = {
+// Seeded the first time a device ever boots, or migrated from the old
+// fixed-8-zone format — see loadZones(). Channel N = board N/8, local N%8, so
+// channel==index reproduces exactly the original single-board wiring.
+static const char* DEFAULT_NAMES[8] = {
     "Zone 1", "Zone 2", "Zone 3", "Zone 4",
     "Zone 5", "Zone 6", "Zone 7", "Well Return",
 };
-
-static const ZoneKind DEFAULT_KINDS[ZONE_COUNT] = {
+static const ZoneKind DEFAULT_KINDS[8] = {
     ZONE_KIND_IRRIGATION, ZONE_KIND_IRRIGATION, ZONE_KIND_IRRIGATION, ZONE_KIND_IRRIGATION,
     ZONE_KIND_IRRIGATION, ZONE_KIND_IRRIGATION, ZONE_KIND_IRRIGATION, ZONE_KIND_DIVERTER,
 };
@@ -68,59 +69,112 @@ static uint8_t histReasonFor(ZoneStopCause c) {
 }
 
 // ---------------------------------------------------------------------------
-//  Name persistence
+//  Persistence — one JSON array blob: [{n,k,ch,x}, ...], index = zone id.
+//  x (deleted) entries are kept in place, never compacted: Programs.cpp
+//  references zones by raw id in ProgramState.zoneMin[], so ids must never
+//  move once assigned.
 // ---------------------------------------------------------------------------
 
-static void loadNames() {
-    Preferences p;
-    p.begin(NVS_ZONE_NS, true);
-    String blob = p.getString(NVS_KEY_NAMES, "");
-    p.end();
-
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
-        strncpy(zones[i].name, DEFAULT_NAMES[i], ZONE_NAME_MAX - 1);
-        zones[i].name[ZONE_NAME_MAX - 1] = '\0';
+static void saveZones() {
+    DynamicJsonDocument doc(ZONE_MAX * 48 + 64);
+    JsonArray arr = doc.to<JsonArray>();
+    for (uint8_t i = 0; i < liveCount; i++) {
+        JsonObject o = arr.createNestedObject();
+        o["n"]  = zones[i].name;
+        o["k"]  = (int)zones[i].kind;
+        o["ch"] = zones[i].channel;
+        if (!zones[i].exists) o["x"] = true;
     }
-    if (blob.isEmpty()) return;
-    // Only names are user-editable; kind is fixed by how the plumbing is built.
-
-    // Stored as newline-separated names, in zone order. A blank field keeps
-    // the default, so a partially-filled record still loads cleanly.
-    int idx = 0, from = 0;
-    while (idx < ZONE_COUNT && from <= (int)blob.length()) {
-        int nl = blob.indexOf('\n', from);
-        String one = (nl < 0) ? blob.substring(from) : blob.substring(from, nl);
-        one.trim();
-        if (one.length()) {
-            strncpy(zones[idx].name, one.c_str(), ZONE_NAME_MAX - 1);
-            zones[idx].name[ZONE_NAME_MAX - 1] = '\0';
-        }
-        idx++;
-        if (nl < 0) break;
-        from = nl + 1;
-    }
-}
-
-void zonesSaveNames() {
-    String blob;
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
-        blob += zones[i].name;
-        if (i < ZONE_COUNT - 1) blob += '\n';
-    }
+    String out;
+    serializeJson(doc, out);
     Preferences p;
     p.begin(NVS_ZONE_NS, false);
-    p.putString(NVS_KEY_NAMES, blob);
+    p.putString(NVS_KEY_ZONES_V2, out);
     p.end();
+}
+
+// One-time seed for a genuinely fresh device, or migration from the old
+// newline-separated-names-only format (8 fixed zones, channel==index). Either
+// way this reproduces the original single-board wiring exactly, so an
+// upgraded unit's existing zone names and behaviour are unchanged.
+static void seedOrMigrateDefaults() {
+    String oldNamesBlob;
+    Preferences p;
+    p.begin(NVS_ZONE_NS, true);
+    oldNamesBlob = p.getString(NVS_KEY_NAMES, "");
+    p.end();
+
+    liveCount = 8;
+    for (uint8_t i = 0; i < 8; i++) {
+        strncpy(zones[i].name, DEFAULT_NAMES[i], ZONE_NAME_MAX - 1);
+        zones[i].name[ZONE_NAME_MAX - 1] = '\0';
+        zones[i].kind    = DEFAULT_KINDS[i];
+        zones[i].exists  = true;
+        zones[i].channel = i;
+    }
+
+    if (!oldNamesBlob.isEmpty()) {
+        int idx = 0, from = 0;
+        while (idx < 8 && from <= (int)oldNamesBlob.length()) {
+            int nl = oldNamesBlob.indexOf('\n', from);
+            String one = (nl < 0) ? oldNamesBlob.substring(from) : oldNamesBlob.substring(from, nl);
+            one.trim();
+            if (one.length()) {
+                strncpy(zones[idx].name, one.c_str(), ZONE_NAME_MAX - 1);
+                zones[idx].name[ZONE_NAME_MAX - 1] = '\0';
+            }
+            idx++;
+            if (nl < 0) break;
+            from = nl + 1;
+        }
+        Log(INFO, "[Zones] Migrated names from the old single-board format");
+    }
+
+    saveZones();
+}
+
+static void loadZones() {
+    Preferences p;
+    p.begin(NVS_ZONE_NS, true);
+    String blob = p.getString(NVS_KEY_ZONES_V2, "");
+    p.end();
+
+    if (blob.isEmpty()) {
+        seedOrMigrateDefaults();
+        return;
+    }
+
+    DynamicJsonDocument doc(ZONE_MAX * 48 + 64);
+    if (deserializeJson(doc, blob) != DeserializationError::Ok) {
+        Log(WARN, "[Zones] Stored zone list unreadable - reseeding defaults");
+        seedOrMigrateDefaults();
+        return;
+    }
+
+    JsonArray arr = doc.as<JsonArray>();
+    liveCount = 0;
+    for (JsonObject o : arr) {
+        if (liveCount >= ZONE_MAX) break;
+        ZoneState& z = zones[liveCount];
+        const char* n = o["n"] | "";
+        strncpy(z.name, n, ZONE_NAME_MAX - 1);
+        z.name[ZONE_NAME_MAX - 1] = '\0';
+        z.kind    = (ZoneKind)(o["k"] | 0);
+        z.channel = (uint8_t)(o["ch"] | 0);
+        z.exists  = !(o["x"] | false);
+        liveCount++;
+    }
+    Log(INFO, "[Zones] Loaded " + String(liveCount) + " zone slot(s)");
 }
 
 bool zoneSetName(uint8_t id, const String& name) {
-    if (id >= ZONE_COUNT) return false;
+    if (id >= liveCount || !zones[id].exists) return false;
     String n = name;
     n.trim();
     if (n.isEmpty()) return false;
     strncpy(zones[id].name, n.c_str(), ZONE_NAME_MAX - 1);
     zones[id].name[ZONE_NAME_MAX - 1] = '\0';
-    zonesSaveNames();
+    saveZones();
     return true;
 }
 
@@ -128,36 +182,53 @@ bool zoneSetName(uint8_t id, const String& name) {
 //  Init
 // ---------------------------------------------------------------------------
 
+void zonesRefreshActive() {
+    for (uint8_t i = 0; i < liveCount; i++) {
+        if (!zones[i].exists) continue;
+        zones[i].active = valveChannelAvailable(zones[i].channel);
+    }
+}
+
 void zonesInit() {
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
-        zones[i].kind     = DEFAULT_KINDS[i];
+    for (uint8_t i = 0; i < ZONE_MAX; i++) {
         zones[i].open     = false;
         zones[i].source   = ZONE_SRC_NONE;
         zones[i].totalSec = 0;
         zones[i].endsAtMs = 0;
+        zones[i].exists   = false;
+        zones[i].active   = false;
     }
-    loadNames();
+    loadZones();
     valveInit();
-    Log(INFO, String("[Zones] ") + ZONE_COUNT + " zones ready, valve backend: " + valveBackendName());
+    zonesRefreshActive();
+
+    uint8_t active = 0;
+    for (uint8_t i = 0; i < liveCount; i++) if (zones[i].exists && zones[i].active) active++;
+    Log(INFO, "[Zones] " + String(liveCount) + " zone(s), " + String(active) + " active, "
+              + (valveFullySimulated() ? String("no valve board (simulated)")
+                                       : String(valveBoardCount()) + " valve board(s)"));
 }
 
 // ---------------------------------------------------------------------------
 //  Queries
 // ---------------------------------------------------------------------------
 
+uint8_t zoneCount()             { return liveCount; }
+bool    zoneExists(uint8_t id)  { return id < liveCount && zones[id].exists; }
+
 const ZoneState& zoneGet(uint8_t id) {
     static ZoneState dummy = {};
-    return (id < ZONE_COUNT) ? zones[id] : dummy;
+    return zoneExists(id) ? zones[id] : dummy;
 }
 
 uint8_t zoneOpenCount() {
     uint8_t n = 0;
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) if (zones[i].open) n++;
+    for (uint8_t i = 0; i < liveCount; i++) if (zones[i].open) n++;
     return n;
 }
 
 uint16_t zoneSecondsLeft(uint8_t id) {
-    if (id >= ZONE_COUNT || !zones[id].open) return 0;
+    if (!zoneExists(id) || !zones[id].open) return 0;
     uint32_t now = millis();
     if ((int32_t)(zones[id].endsAtMs - now) <= 0) return 0;
     return (uint16_t)((zones[id].endsAtMs - now) / 1000UL);
@@ -181,6 +252,7 @@ const char* zoneRejectName(ZoneReject r) {
         case ZONE_REJ_METER:         return "meter not calibrated - a start could not be verified";
         case ZONE_REJ_MOTOR_FAULT:   return "motor drive is in fault - clear it first";
         case ZONE_REJ_BAD_DURATION:  return "duration out of range";
+        case ZONE_REJ_INACTIVE:      return "zone's relay channel is not detected - remap or reconnect the board";
         default:                     return "refused";
     }
 }
@@ -203,7 +275,7 @@ const char*   zoneLastStopZoneName() { return lastStopZone; }
 static void latchStop(ZoneStopCause c) {
     lastStopCause = c;
     lastStopZone[0] = '\0';
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
+    for (uint8_t i = 0; i < liveCount; i++) {
         if (zones[i].open) {
             strncpy(lastStopZone, zones[i].name, ZONE_NAME_MAX - 1);
             lastStopZone[ZONE_NAME_MAX - 1] = '\0';
@@ -228,11 +300,75 @@ static ZoneReject supplyGate() {
 }
 
 // ---------------------------------------------------------------------------
+//  Create / delete / remap
+// ---------------------------------------------------------------------------
+
+static bool channelTaken(uint8_t channel, uint8_t excludeId) {
+    for (uint8_t i = 0; i < liveCount; i++) {
+        if (i == excludeId || !zones[i].exists) continue;
+        if (zones[i].channel == channel) return true;
+    }
+    return false;
+}
+
+uint8_t zoneCreate(const String& name, ZoneKind kind, uint8_t channel) {
+    if (channel >= VALVE_CHANNELS) return 0xFF;
+    if (channelTaken(channel, 0xFF)) return 0xFF;
+    String n = name; n.trim();
+    if (n.isEmpty()) return 0xFF;
+    if (liveCount >= ZONE_MAX) return 0xFF;
+
+    uint8_t id = liveCount++;
+    ZoneState& z = zones[id];
+    strncpy(z.name, n.c_str(), ZONE_NAME_MAX - 1);
+    z.name[ZONE_NAME_MAX - 1] = '\0';
+    z.kind     = kind;
+    z.channel  = channel;
+    z.exists   = true;
+    z.active   = valveChannelAvailable(channel);
+    z.open     = false;
+    z.source   = ZONE_SRC_NONE;
+    z.totalSec = 0;
+    z.endsAtMs = 0;
+    saveZones();
+    Log(INFO, "[Zones] Created " + n + " on channel " + String(channel));
+    return id;
+}
+
+bool zoneDelete(uint8_t id) {
+    if (!zoneExists(id)) return false;
+    if (zones[id].open) return false;   // refuse — see zoneStart()'s pumpStopPending check for why
+    zones[id].exists = false;
+    saveZones();
+    Log(INFO, "[Zones] Deleted " + String(zones[id].name) + " (id " + String(id)
+              + ") - channel " + String(zones[id].channel) + " freed for reassignment");
+    return true;
+}
+
+bool zoneSetChannel(uint8_t id, uint8_t channel) {
+    if (!zoneExists(id)) return false;
+    if (zones[id].open) return false;
+    if (channel >= VALVE_CHANNELS) return false;
+    if (channelTaken(channel, id)) return false;
+    zones[id].channel = channel;
+    zones[id].active  = valveChannelAvailable(channel);
+    saveZones();
+    Log(INFO, "[Zones] " + String(zones[id].name) + " remapped to channel " + String(channel));
+    return true;
+}
+
+void zonesRescanBoard() {
+    valveRescan();
+    zonesRefreshActive();
+}
+
+// ---------------------------------------------------------------------------
 //  Start / stop
 // ---------------------------------------------------------------------------
 
 ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
-    if (id >= ZONE_COUNT)                          return ZONE_REJ_BAD_ID;
+    if (!zoneExists(id))                            return ZONE_REJ_BAD_ID;
+    if (!zones[id].active)                          return ZONE_REJ_INACTIVE;
     if (minutes == 0 || minutes > ZONE_MAX_MINUTES) return ZONE_REJ_BAD_DURATION;
 
     // Re-running an already-open zone just extends it; that is what an operator
@@ -271,7 +407,7 @@ ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
     if (pumpStopPending) return ZONE_REJ_MOTOR_FAULT;
 
     // --- Only now does the valve open --------------------------------------
-    if (!valveSet(id, true)) return ZONE_REJ_VALVE_FAULT;
+    if (!valveSet(zones[id].channel, true)) return ZONE_REJ_VALVE_FAULT;
 
     zones[id].open     = true;
     zones[id].source   = src;
@@ -287,7 +423,7 @@ ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
 }
 
 void zoneStop(uint8_t id, uint8_t histReason) {
-    if (id >= ZONE_COUNT || !zones[id].open) return;
+    if (!zoneExists(id) || !zones[id].open) return;
 
     // If this is the last open zone and the pump might still be turning,
     // command it down first and let zonesTask()'s wind-down close the valve
@@ -310,7 +446,7 @@ void zoneStop(uint8_t id, uint8_t histReason) {
         return;
     }
 
-    if (!valveSet(id, false)) {
+    if (!valveSet(zones[id].channel, false)) {
         // I2C write failed: the valve may still be physically open. Do NOT
         // clear zones[id].open — that would under-count physically-open
         // valves, letting a later zoneStart() exceed ZONE_MAX_CONCURRENT, and
@@ -359,9 +495,9 @@ void zonesStopAll(ZoneStopCause cause) {
     // Current already confirmed not flowing (or the drive doesn't own the
     // relays) - nothing to wait for.
     uint8_t reason = histReasonFor(cause);
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
+    for (uint8_t i = 0; i < liveCount; i++) {
         if (!zones[i].open) continue;
-        if (!valveSet(i, false)) {
+        if (!valveSet(zones[i].channel, false)) {
             Log(ERROR, "[Zones] " + String(zones[i].name) + " close FAILED (I2C) during stop-all");
             continue;   // leave zones[i].open true - see zoneStop() for why
         }
@@ -440,9 +576,9 @@ void zonesTask() {
                 Log(WARN, "[Zones] Pump current did not confirm stopped within wind-down; "
                           "closing valves anyway");
             }
-            for (uint8_t i = 0; i < ZONE_COUNT; i++) {
+            for (uint8_t i = 0; i < liveCount; i++) {
                 if (!zones[i].open) continue;
-                if (!valveSet(i, false)) {
+                if (!valveSet(zones[i].channel, false)) {
                     Log(ERROR, "[Zones] " + String(zones[i].name)
                                + " close FAILED (I2C) at end of wind-down - leaving it flagged open");
                     continue;   // see zoneStop() for why zones[i].open stays true
@@ -461,7 +597,7 @@ void zonesTask() {
     }
 
     // --- Expire finished zones ---
-    for (uint8_t i = 0; i < ZONE_COUNT; i++) {
+    for (uint8_t i = 0; i < liveCount; i++) {
         if (!zones[i].open) continue;
         if ((int32_t)(zones[i].endsAtMs - now) <= 0) {
             Log(INFO, "[Zones] " + String(zones[i].name) + " run complete");

@@ -23,7 +23,7 @@ static void loadProgram(uint8_t i) {
     p.dayMode      = WDAY_SPECIFIC;
     p.dayMask      = 0x7F;   // every day
     p.intervalDays = 2;
-    for (uint8_t z = 0; z < ZONE_COUNT; z++) p.zoneMin[z] = 0;
+    for (uint8_t z = 0; z < ZONE_MAX; z++) p.zoneMin[z] = 0;
     p.source       = MOTOR_WELL;
     p.running      = false;
     p.currentZone  = -1;
@@ -35,7 +35,10 @@ static void loadProgram(uint8_t i) {
     prefs.end();
     if (blob.isEmpty()) return;
 
-    StaticJsonDocument<512> doc;
+    // ZONE_MAX grew from 8 to 32 (dynamic zone model) — zoneMin[] alone needs
+    // roughly 32*16 bytes of ArduinoJson's DOM overhead, so 512 no longer has
+    // margin. 1536 comfortably covers one program's full field set.
+    StaticJsonDocument<1536> doc;
     if (deserializeJson(doc, blob) != DeserializationError::Ok) return;
 
     p.enabled = doc["en"] | false;
@@ -51,14 +54,17 @@ static void loadProgram(uint8_t i) {
     p.intervalDays = doc["iv"] | 2;
     JsonArray zm = doc["zm"];
     uint8_t zi = 0;
-    for (JsonVariant v : zm) { if (zi >= ZONE_COUNT) break; p.zoneMin[zi++] = v.as<uint16_t>(); }
+    for (JsonVariant v : zm) { if (zi >= ZONE_MAX) break; p.zoneMin[zi++] = v.as<uint16_t>(); }
     p.source       = (doc["src"] | 0) == 1 ? MOTOR_BORE : MOTOR_WELL;
     p.lastRunEpoch = doc["lr"] | 0;
 }
 
 static void saveProgramToNvs(uint8_t i) {
     ProgramState& p = programs[i];
-    StaticJsonDocument<512> doc;
+    // ZONE_MAX grew from 8 to 32 (dynamic zone model) — zoneMin[] alone needs
+    // roughly 32*16 bytes of ArduinoJson's DOM overhead, so 512 no longer has
+    // margin. 1536 comfortably covers one program's full field set.
+    StaticJsonDocument<1536> doc;
     doc["en"] = p.enabled;
     doc["nm"] = p.name;
     JsonArray st = doc.createNestedArray("st");
@@ -67,7 +73,7 @@ static void saveProgramToNvs(uint8_t i) {
     doc["dk"]  = p.dayMask;
     doc["iv"]  = p.intervalDays;
     JsonArray zm = doc.createNestedArray("zm");
-    for (uint8_t z = 0; z < ZONE_COUNT; z++) zm.add(p.zoneMin[z]);
+    for (uint8_t z = 0; z < ZONE_MAX; z++) zm.add(p.zoneMin[z]);
     doc["src"] = p.source == MOTOR_BORE ? 1 : 0;
     doc["lr"]  = p.lastRunEpoch;
 
@@ -205,7 +211,7 @@ static uint16_t scaledMinutes(uint16_t base) {
 // ---------------------------------------------------------------------------
 
 static int8_t nextZoneAfter(const ProgramState& p, int8_t after) {
-    for (int8_t z = after + 1; z < ZONE_COUNT; z++) {
+    for (int8_t z = after + 1; z < ZONE_MAX; z++) {
         if (p.zoneMin[z] > 0) return z;
     }
     return -1;

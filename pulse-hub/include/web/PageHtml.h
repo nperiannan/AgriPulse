@@ -109,10 +109,19 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         At most 3 valves open together (5 HP head limit). The valve opens before the pump starts and
         closes only after it stops, so the pump is never run against a closed system.
       </div>
-      <details style="margin-top:10px">
-        <summary class="hint" style="cursor:pointer">Rename zones</summary>
-        <div id="zoneNames" style="margin-top:6px"></div>
-        <div class="brow"><button class="btn-s" id="btnZoneNamesSave">Save names</button></div>
+      <details id="zoneMgrDetails" style="margin-top:10px">
+        <summary class="hint" style="cursor:pointer">Manage zones (add, rename, remap, remove)</summary>
+        <div id="zoneBoards" class="hint" style="margin-top:6px"></div>
+        <div id="zoneMgrList" style="margin-top:4px"></div>
+        <div class="row" style="border:none;flex-wrap:wrap">
+          <input id="zn_name" class="inp w" placeholder="New zone name" maxlength="16" style="min-width:140px">
+          <select id="zn_kind" class="inp">
+            <option value="irrigation">Irrigation</option>
+            <option value="diverter">Diverter (to well)</option>
+          </select>
+          <select id="zn_channel" class="inp"></select>
+          <button class="btn-s" id="btnZoneAdd">+ Add zone</button>
+        </div>
       </details>
     </div>
     <div id="zoneProgArea" class="grid full" style="grid-column:1/-1;display:contents">

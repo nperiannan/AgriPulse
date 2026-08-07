@@ -17,9 +17,9 @@ typedef enum : uint8_t {
     HIST_BOOT         = 6,
     // Added 2026-08-07 for irrigation zones. The 8-byte record has no spare
     // field, so for these two event types ONLY, HistoryRecord.ohState is
-    // repurposed to carry the zone id (0-7) instead of a TankState — every
-    // record already in EEPROM predates these event codes, so old records are
-    // unaffected and need no migration.
+    // repurposed to carry the zone id (0-31, ZONE_MAX in Zones.h) instead of a
+    // TankState — every record already in EEPROM predates these event codes,
+    // so old records are unaffected and need no migration.
     HIST_ZONE_OPEN    = 7,   // ohState field holds the zone id
     HIST_ZONE_CLOSE   = 8,   // ohState field holds the zone id
 } HistEvent;
