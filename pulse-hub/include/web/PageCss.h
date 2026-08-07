@@ -35,6 +35,36 @@ body{margin:0;background:var(--bg);color:var(--tx);
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:13px}
 .card.full{grid-column:1/-1}
 .ct{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2);margin:0 0 9px}
+/* Standard card header: title left, at most one action button right, same
+   size/position on every card that uses it — the Network tab's cards used to
+   each place their button somewhere different. */
+.card-hd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.card-hd .ct{margin:0}
+/* Long explanatory paragraphs used to sit permanently in the card body; this
+   collapses them into a small hover/focus tooltip next to the title instead. */
+.info-dot{width:15px;height:15px;border-radius:50%;border:1px solid var(--bd2);color:var(--tx2);
+  font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;
+  cursor:help;flex:none;position:relative;margin-left:6px;vertical-align:middle}
+.info-dot .tip{display:none;position:absolute;top:20px;left:0;z-index:5;width:220px;
+  background:var(--card2);border:1px solid var(--bd2);border-radius:8px;padding:9px 11px;
+  font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;line-height:1.5;
+  color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.info-dot:hover .tip,.info-dot:focus .tip{display:block}
+/* One bordered group per password/secret, each with its own label+input
+   pairs and save button — replaces three ambiguous unlabeled-field rows. */
+.pw-group{border:1px solid var(--bd);border-radius:8px;padding:11px;margin-top:10px}
+.pw-group:first-child{margin-top:0}
+.pw-group-title{font-size:12px;font-weight:600;margin-bottom:9px;display:flex;align-items:center}
+.field-row{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}
+.field-label{font-size:11px;color:var(--tx2);font-weight:500}
+.pw-row{display:flex;gap:8px;flex-wrap:wrap}
+/* Compact table for the raw per-phase calibration values. */
+.raw-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.raw-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--tx2);padding:0 0 6px;font-weight:600}
+.raw-table th:last-child,.raw-table td.num{text-align:right}
+.raw-table td{padding:6px 0;border-top:1px solid var(--bd);vertical-align:middle}
+.raw-table input{width:100px;text-align:right}
 .badge{display:inline-block;padding:2px 9px;border-radius:11px;font-size:11px;font-weight:600}
 .b-ok{background:rgba(63,185,80,.16);color:var(--ok)}
 .b-warn{background:rgba(210,153,34,.16);color:var(--warn)}

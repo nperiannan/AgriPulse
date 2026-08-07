@@ -177,12 +177,15 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <button class="btn-s" id="btnQcI">Apply</button>
         <div class="hint">One shared scale is applied to all three phases.</div></div>
 
-      <div class="row" style="margin-top:6px"><span class="lb" style="font-weight:650">Raw scale values</span></div>
-      <div class="row"><span class="lb">Volt scale R</span><input id="cal_v_a" class="inp w" type="text"></div>
-      <div class="row"><span class="lb">Volt scale Y</span><input id="cal_v_b" class="inp w" type="text"></div>
-      <div class="row"><span class="lb">Volt scale B</span><input id="cal_v_c" class="inp w" type="text"></div>
-      <div class="row"><span class="lb">Current scale</span><input id="cal_i" class="inp w" type="text">
-        <div class="hint">Amps per count, from the CT ratio and the 10 &ohm; burden.</div></div>
+      <div class="ct" style="margin-top:14px">Raw scale values</div>
+      <table class="raw-table">
+        <tr><th>Phase</th><th>Voltage scale</th></tr>
+        <tr><td>Red</td><td class="num"><input id="cal_v_a" class="inp" type="text"></td></tr>
+        <tr><td>Yellow</td><td class="num"><input id="cal_v_b" class="inp" type="text"></td></tr>
+        <tr><td>Blue</td><td class="num"><input id="cal_v_c" class="inp" type="text"></td></tr>
+      </table>
+      <div class="row"><span class="lb">Current scale (shared)</span><input id="cal_i" class="inp w" type="text">
+        <div class="hint">Amps per count, from the CT ratio and the 10 &ohm; burden. One value applies to all three phases.</div></div>
       <div class="row"><span class="lb">Mark calibrated</span>
         <select id="calFlag" class="inp">
           <option value="0">No &mdash; trips disarmed</option>
@@ -234,12 +237,12 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div id="p-net" class="pane">
    <div class="grid">
     <div class="card">
-      <div class="ct">Wi-Fi</div>
+      <div class="card-hd">
+        <span class="ct">Wi-Fi</span>
+        <button class="btn-s" id="btnWifiScan">Scan</button>
+      </div>
       <div class="hint" style="margin-bottom:7px">Saved networks, tried in this order.</div>
       <div id="wifiNets"></div>
-      <div class="brow" style="margin-bottom:4px">
-        <button class="btn" id="btnWifiScan">Scan for networks</button>
-      </div>
       <div id="scanWrap" class="reserve"></div>
       <details style="margin-top:8px">
         <summary class="hint" style="cursor:pointer">Add a hidden network by name</summary>
@@ -249,38 +252,61 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       </details>
     </div>
     <div class="card">
-      <div class="ct">MQTT</div>
+      <div class="card-hd">
+        <span class="ct">MQTT<span class="info-dot" tabindex="0">i<span class="tip">Remote monitoring broker.
+          Status shows the live connection; Save reconnects immediately with the new values.</span></span></span>
+        <button class="btn-s" id="btnSaveMqtt">Save</button>
+      </div>
       <div class="row"><span class="lb">Broker</span><input id="mq_host" class="inp w"></div>
       <div class="row"><span class="lb">Port</span><input id="mq_port" class="inp" type="number"></div>
       <div class="row"><span class="lb">Status</span><span id="mq_st" class="badge b-off">--</span></div>
-      <div class="brow"><button class="btn" id="btnSaveMqtt">Save &amp; reconnect</button></div>
     </div>
     <div class="card">
-      <div class="ct">Passwords</div>
-      <div class="row"><span class="lb">Web login</span>
-        <input id="web_user_inp" class="inp" placeholder="user">
-        <input id="web_pass_inp" class="inp" type="password" placeholder="min 8">
-        <button class="btn-s" id="btnWebPass">Set</button>
-        <div class="hint">Logs in to this page and the /status API. Username field shows the current one as a placeholder — leave blank to keep it. Applies immediately; you'll need to sign in again.</div></div>
-      <div class="row"><span class="lb">AP hotspot</span>
-        <input id="ap_pass_inp" class="inp" type="password" placeholder="min 8">
-        <button class="btn-s" id="btnApPass">Set</button>
-        <div class="hint">Wi-Fi password for this device's own "AgriPulse" hotspot. Applies immediately — anything already joined to it (including this browser, if you're on it) will be dropped.</div></div>
-      <div class="row"><span class="lb">OTA upload</span>
-        <input id="ota_pass_inp" class="inp" type="password" placeholder="min 8">
-        <button class="btn-s" id="btnOtaPass">Set</button>
-        <div class="hint">Must match the --auth used when uploading. Applies after reboot.</div></div>
-    </div>
-    <div class="card">
-      <div class="ct">I2C Expansion Boards</div>
-      <div class="hint" style="margin-bottom:7px">A relay board and an LCD backpack use the same chip and are
-        otherwise indistinguishable on the bus — declaring an address here as an expansion board keeps it from
-        ever being mistaken for the LCD, regardless of what else is connected at boot.</div>
+      <div class="card-hd">
+        <span class="ct">I2C Expansion Boards<span class="info-dot" tabindex="0">i<span class="tip">A relay board
+          and an LCD backpack use the same chip and are otherwise indistinguishable on the bus — declaring an
+          address here keeps it from ever being mistaken for the LCD, regardless of what else is connected at
+          boot.</span></span></span>
+      </div>
       <div id="i2cExpList"></div>
       <div class="row" style="border:none;flex-wrap:wrap">
         <input id="i2cexp_addr" class="inp" placeholder="0x20" list="i2cexp_suggest" style="width:100px">
         <datalist id="i2cexp_suggest"></datalist>
-        <button class="btn-s" id="btnI2cExpAdd">+ Declare as expansion board</button>
+        <button class="btn-s" id="btnI2cExpAdd">+ Declare board</button>
+      </div>
+    </div>
+    <div class="card full">
+      <div class="card-hd"><span class="ct">Passwords</span></div>
+      <div class="pw-group">
+        <div class="pw-group-title">Web login<span class="info-dot" tabindex="0">i<span class="tip">Signs into
+          this page and the /status API. Changing it signs you out immediately — you'll need to sign back in with
+          the new password.</span></span></div>
+        <div class="pw-row">
+          <span class="field-row"><span class="field-label">Username</span>
+            <input id="web_user_inp" class="inp w" placeholder="admin"></span>
+          <span class="field-row"><span class="field-label">Password</span>
+            <input id="web_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
+        </div>
+        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnWebPass">Set web login</button></div>
+      </div>
+      <div class="pw-group">
+        <div class="pw-group-title">AP hotspot password<span class="info-dot" tabindex="0">i<span class="tip">
+          Wi-Fi password for this device's own "AgriPulse" hotspot. Applies immediately — anything already
+          joined to it, including this browser, is dropped.</span></span></div>
+        <div class="pw-row">
+          <span class="field-row" style="max-width:260px"><span class="field-label">New password</span>
+            <input id="ap_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
+        </div>
+        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnApPass">Set hotspot password</button></div>
+      </div>
+      <div class="pw-group">
+        <div class="pw-group-title">OTA upload password<span class="info-dot" tabindex="0">i<span class="tip">
+          Must match the --auth used when uploading firmware over Wi-Fi. Applies after the next reboot.</span></span></div>
+        <div class="pw-row">
+          <span class="field-row" style="max-width:260px"><span class="field-label">New password</span>
+            <input id="ota_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
+        </div>
+        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnOtaPass">Set OTA password</button></div>
       </div>
     </div>
    </div>
