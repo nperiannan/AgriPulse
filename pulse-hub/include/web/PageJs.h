@@ -163,6 +163,19 @@ var Zones={
                   +(board.present?'':' — not detected')+')')
                 :('ch '+ch+' (no board declared)');
   },
+  // Hardware-only relay pulse — clicks the physical relay for 3s without
+  // ever asking the motor to start (see zoneTestRelay() in Zones.cpp), so
+  // it's safe to use with the starter panel disconnected or the supply
+  // abnormal. Blocked whenever ANY zone is open anywhere, not just this one:
+  // a bench test must never overlap a live irrigation cycle.
+  testButton:function(z,d){
+    var blocked=!z.active||d.open_count>0;
+    var title=!z.active?'Zone is inactive — see Manage zones'
+             :d.open_count>0?'Stop all zones first'
+             :'Pulses the relay 3s — does not start the motor';
+    return '<button class="btn-s zbtn" data-zid="'+z.id+'" data-zact="test"'
+      +(blocked?' disabled':'')+' title="'+title+'">Test relay</button>';
+  },
   poll:function(){
     return Api.get('/api/zones').then(function(d){
       Zones.lastZonesData=d;
@@ -226,6 +239,7 @@ var Zones={
             +(z.open?'stop':'run')+'"'+(blocked?' disabled title="'
               +(z.active?'Valve limit reached':'Zone is inactive \u2014 see Manage zones')+'"':'')+'>'
             +(z.open?'Stop':'Run')+'</button>'
+          +Zones.testButton(z,d)
           +'</div>';}
       UI.el('zones').innerHTML=h;
     }).catch(function(){});
@@ -1059,6 +1073,8 @@ UI.el('zones').addEventListener('click',function(e){
     var m=parseInt(UI.el('zoneMins').value,10);
     if(!m||m<1){UI.toast('Enter a run time in minutes','err');return;}
     Zones.cmd({cmd:'run',id:b.dataset.zid,minutes:m});
+  } else if(b.dataset.zact==='test'){
+    UI.act('/api/zones/cmd',{cmd:'test',id:b.dataset.zid},'Relay pulsed (3s, motor untouched)').then(Zones.poll);
   } else {
     Zones.cmd({cmd:'stop',id:b.dataset.zid});
   }

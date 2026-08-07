@@ -84,6 +84,7 @@ enum ZoneReject : uint8_t {
     ZONE_REJ_MOTOR_FAULT,       // drive in fault or welded, needs clearing first
     ZONE_REJ_BAD_DURATION,
     ZONE_REJ_INACTIVE,          // zone's mapped channel has no board behind it right now
+    ZONE_REJ_TEST_BUSY,         // a test pulse (or a real run) is already active somewhere
 };
 
 // Why watering last stopped on its own. Worth distinguishing: a dry run and a
@@ -127,6 +128,18 @@ ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src);
 // (default REASON_MANUAL_WEB — the API's "stop" command is the common caller).
 void zoneStop(uint8_t id, uint8_t histReason = REASON_MANUAL_WEB);
 void zonesStopAll(ZoneStopCause cause);
+
+// Hardware-only relay test: pulses zone `id`'s relay open for `ms`
+// milliseconds then closes it again automatically — a direct valveSet() call,
+// completely bypassing zoneStart()'s interlock chain (no supply check, no
+// ZONE_MAX_CONCURRENT limit, no history record, and critically: the motor is
+// NEVER asked to start). This is for answering exactly one question — "does
+// clicking this zone's relay click the physical channel I expect" — safely,
+// even with the starter panel disconnected or the supply abnormal. Refuses
+// while the zone is already open via a real run, another test pulse is
+// active, any zone anywhere is open, or the pump may be running — a bench
+// test must never cross into a live irrigation cycle.
+ZoneReject zoneTestRelay(uint8_t id, uint16_t ms);
 
 // zoneCount()/zoneExists() — iterate 0..zoneCount()-1, skip !zoneExists(i) for
 // anything user-facing (a tombstoned id can never be open, so the interlock

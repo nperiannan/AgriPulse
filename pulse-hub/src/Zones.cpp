@@ -56,6 +56,15 @@ static uint8_t  pumpStopHistReason = REASON_MANUAL_WEB;  // for the HIST_ZONE_CL
 // Welded waits indefinitely for current to actually clear.
 #define ZONE_PUMP_WINDDOWN_MS 8000UL
 
+// Hardware-only relay test — see zoneTestRelay(). -1 = no test pulse active.
+// Deliberately separate from ZoneState.open/pumpStopPending: this path never
+// touches the motor and never sets .open, so it can never be mistaken for a
+// real run by zoneOpenCount()/zonesWantPump() and can never be picked up by
+// the pump-coordination block in zonesTask().
+#define ZONE_TEST_MAX_MS 10000UL
+static int8_t   testPulseZone  = -1;
+static uint32_t testPulseEndMs = 0;
+
 // Map a zone-level stop cause onto the closest-fitting persisted HistReason.
 // The 4-bit reason field in HistoryRecord.flags (see History.cpp) is already
 // fully populated 0-15, so this reuses existing codes rather than adding new
@@ -253,6 +262,7 @@ const char* zoneRejectName(ZoneReject r) {
         case ZONE_REJ_MOTOR_FAULT:   return "motor drive is in fault - clear it first";
         case ZONE_REJ_BAD_DURATION:  return "duration out of range";
         case ZONE_REJ_INACTIVE:      return "zone's relay channel is not detected - remap or reconnect the board";
+        case ZONE_REJ_TEST_BUSY:     return "a test pulse or a real run is already active - wait for it to finish";
         default:                     return "refused";
     }
 }
@@ -363,12 +373,45 @@ void zonesRescanBoard() {
 }
 
 // ---------------------------------------------------------------------------
+//  Hardware-only relay test — see the declaration in Zones.h for the full
+//  rationale. Deliberately as small and separate from zoneStart()/zoneStop()
+//  as possible: no supply gate, no drive interaction, no history record,
+//  nothing that could accidentally grow into "another way to run a zone".
+// ---------------------------------------------------------------------------
+
+ZoneReject zoneTestRelay(uint8_t id, uint16_t ms) {
+    if (!zoneExists(id))    return ZONE_REJ_BAD_ID;
+    if (!zones[id].active)  return ZONE_REJ_INACTIVE;
+    if (zones[id].open)     return ZONE_REJ_TEST_BUSY;   // already open via a real run
+    if (testPulseZone >= 0) return ZONE_REJ_TEST_BUSY;   // another test pulse already running
+    // Never overlap a bench test with a live irrigation cycle, even on a
+    // different zone/channel — simplest safe rule, and this is a bench-test
+    // feature that should never need to run while anything real is happening.
+    if (zoneOpenCount() > 0)                                    return ZONE_REJ_TEST_BUSY;
+    if (motorDriveEnabled() && motorDriveCurrentFlowing())      return ZONE_REJ_TEST_BUSY;
+    if (ms == 0 || ms > ZONE_TEST_MAX_MS)                       return ZONE_REJ_BAD_DURATION;
+
+    if (!valveSet(zones[id].channel, true)) return ZONE_REJ_VALVE_FAULT;
+    testPulseZone  = (int8_t)id;
+    testPulseEndMs = millis() + ms;
+    Log(INFO, "[Zones] " + String(zones[id].name) + " TEST pulse (" + String(ms)
+              + "ms, ch " + String(zones[id].channel) + ") - relay only, motor untouched");
+    return ZONE_REJ_NONE;
+}
+
+// ---------------------------------------------------------------------------
 //  Start / stop
 // ---------------------------------------------------------------------------
 
 ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
     if (!zoneExists(id))                            return ZONE_REJ_BAD_ID;
     if (!zones[id].active)                          return ZONE_REJ_INACTIVE;
+    // A relay test pulse is scheduled to auto-close on its own timer with no
+    // interlock chain behind it — letting a real run start on the same (or
+    // any) channel while one is pending is exactly the race that would let
+    // the test's auto-close steal a valve out from under a real run, or vice
+    // versa. Simplest safe rule: never overlap them at all.
+    if (testPulseZone >= 0)                         return ZONE_REJ_TEST_BUSY;
     if (minutes == 0 || minutes > ZONE_MAX_MINUTES) return ZONE_REJ_BAD_DURATION;
 
     // Re-running an already-open zone just extends it; that is what an operator
@@ -467,6 +510,16 @@ void zoneStop(uint8_t id, uint8_t histReason) {
 }
 
 void zonesStopAll(ZoneStopCause cause) {
+    // A test pulse never sets .open or pumpStopPending, so it's invisible to
+    // the early-return below — handle it unconditionally first. An operator
+    // hitting Stop All should stop literally everything, including a bench
+    // test in progress.
+    if (testPulseZone >= 0) {
+        valveSet(zones[testPulseZone].channel, false);
+        Log(INFO, "[Zones] Test pulse on " + String(zones[testPulseZone].name) + " cancelled by stop-all");
+        testPulseZone = -1;
+    }
+
     if (zoneOpenCount() == 0 && !pumpStopPending) return;
     latchStop(cause);
 
@@ -517,6 +570,15 @@ void zonesStopAll(ZoneStopCause cause) {
 
 void zonesTask() {
     uint32_t now = millis();
+
+    // --- Relay test pulse: auto-close on its own timer, independent of
+    // everything below (it never touched the motor or .open in the first
+    // place, so there is nothing else here that needs to know about it).
+    if (testPulseZone >= 0 && (int32_t)(now - testPulseEndMs) >= 0) {
+        valveSet(zones[testPulseZone].channel, false);
+        Log(INFO, "[Zones] Test pulse on " + String(zones[testPulseZone].name) + " ended");
+        testPulseZone = -1;
+    }
 
     // --- Safety first: a drive fault closes everything, immediately ---
     //

@@ -133,6 +133,15 @@ static void postZoneCmd() {
         apiSendOk();
         return;
     }
+    if (cmd == "test") {
+        // Hardware-only relay pulse — see Zones.h/zoneTestRelay(). Fixed 3s,
+        // not user-configurable: long enough to hear/see the click, short
+        // enough that forgetting about it doesn't matter.
+        ZoneReject r = zoneTestRelay((uint8_t)id, 3000);
+        if (r != ZONE_REJ_NONE) { apiSendError(zoneRejectName(r)); return; }
+        apiSendOk();
+        return;
+    }
     if (cmd == "rename") {
         if (!zoneSetName((uint8_t)id, apiServer.arg("name"))) {
             apiSendError("name required"); return;
