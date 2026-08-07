@@ -70,6 +70,18 @@ body{margin:0;background:var(--bg);color:var(--tx);
 .b-warn{background:rgba(210,153,34,.16);color:var(--warn)}
 .b-err{background:rgba(248,81,73,.16);color:var(--err)}
 .b-off{background:var(--card2);color:var(--tx2)}
+/* Control tab's field map: the plumbing itself (pump -> trunk -> per-zone
+   branch), not an abstract tile grid. Fully dynamic — FieldMap.render()
+   rebuilds it from live zone data every poll, so it scales to however many
+   zones actually exist. */
+.fm-wrap{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
+.fm-map{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:8px;overflow:hidden}
+.fm-side{display:flex;flex-direction:column;gap:9px}
+.fm-stat{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px}
+.fm-stat-lb{font-size:10.5px;color:var(--tx2);margin-bottom:4px}
+.fm-stat-val{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.fm-stat-val small{font-size:11px;font-weight:500;color:var(--tx2)}
+@media (max-width:640px){.fm-wrap{grid-template-columns:1fr}}
 .banner{padding:9px 12px;border-radius:7px;font-size:12.5px;margin-bottom:11px;display:none}
 .bn-warn{background:rgba(210,153,34,.12);border:1px solid var(--warn);color:var(--warn)}
 .bn-err{background:rgba(248,81,73,.12);border:1px solid var(--err);color:var(--err)}

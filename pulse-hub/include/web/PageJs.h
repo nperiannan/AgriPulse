@@ -89,6 +89,13 @@ var Power={
       if(yv)yv.textContent=UI.fmt(d.phases[1]&&d.phases[1].volts,1);
       if(bv)bv.textContent=UI.fmt(d.phases[2]&&d.phases[2].volts,1);
       if(iv)iv.textContent=UI.fmt(d.max_amps,2);
+      // Field map stats (Control tab) — same source as the Supply table
+      // above, just given equal visual weight instead of buried in a table.
+      var fa=UI.el('fmAmps');
+      if(fa)fa.innerHTML=UI.fmt(d.max_amps,2)+' <small>A</small>';
+      var fv=UI.el('fmVolts');
+      if(fv)fv.innerHTML=UI.fmt(d.phases[0]&&d.phases[0].volts,0)+' / '+UI.fmt(d.phases[1]&&d.phases[1].volts,0)
+        +' / '+UI.fmt(d.phases[2]&&d.phases[2].volts,0)+' <small>V</small>';
       var mb=UI.el('meterBadge');
       mb.textContent=d.healthy?'meter ok':'meter fault';
       mb.className='badge '+(d.healthy?'b-ok':'b-err');
@@ -144,6 +151,53 @@ var Motor={
   cmd:function(c,extra){
     var o={cmd:c};if(extra)for(var k in extra)o[k]=extra[k];
     return UI.act('/api/motor/cmd',o,null).then(Motor.poll);
+  }
+};
+
+/* ---- Field map (Control tab) ----
+   The plumbing itself, not a tile grid: a pump node, a trunk line, one
+   branch per zone. Fully generated from live /api/zones data every poll —
+   scales to however many zones actually exist (not a fixed mock count) and
+   never touches motor state directly, it just reflects what Zones.poll()
+   already fetched. */
+var FieldMap={
+  esc:function(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');},
+  mmss:function(s){var m=Math.floor(s/60),r=s%60;return m+':'+(r<10?'0':'')+r;},
+  render:function(d){
+    var el=UI.el('fmMap'); if(!el)return;   // Control tab's map only exists on that pane
+    var zones=d.zones||[];   // every zone, including inactive ones (shown dimmed, not hidden)
+    var n=zones.length;
+    var rowH=42, top=16, svgW=520, svgH=n?Math.max(top*2+n*rowH,90):90;
+    var trunkX=104, boxX=148, boxW=svgW-boxX-14, boxH=32;
+    var anyOpen=zones.some(function(z){return z.open;});
+    var motorY=svgH/2;
+    var pumpColor=anyOpen?'var(--ok)':'var(--bd2)';
+    var s='<svg viewBox="0 0 '+svgW+' '+svgH+'" width="100%" height="'+svgH+'" role="img" aria-label="Field layout">';
+    s+='<circle cx="34" cy="'+motorY+'" r="18" fill="var(--card)" stroke="'+pumpColor+'" stroke-width="2"/>';
+    s+='<text x="34" y="'+(motorY+3)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--tx)">PUMP</text>';
+    s+='<line x1="52" y1="'+motorY+'" x2="'+trunkX+'" y2="'+motorY+'" stroke="'+pumpColor+'" stroke-width="3"/>';
+    if(n>1){
+      var firstY=top+rowH/2, lastY=top+(n-1)*rowH+rowH/2;
+      s+='<line x1="'+trunkX+'" y1="'+firstY+'" x2="'+trunkX+'" y2="'+lastY+'" stroke="var(--bd2)" stroke-width="3"/>';
+    }
+    if(!n){
+      s+='<text x="'+(trunkX+20)+'" y="'+(motorY+4)+'" font-size="12" fill="var(--tx2)">No zones yet — add one on the Zones tab.</text>';
+    }
+    zones.forEach(function(z,i){
+      var y=top+i*rowH+rowH/2, boxY=y-boxH/2;
+      var inactive=z.active===false;
+      var col=z.open?'var(--ok)':(inactive?'var(--err)':'var(--bd2)');
+      var fill=z.open?'rgba(46,160,67,.15)':'var(--card)';
+      s+='<line x1="'+trunkX+'" y1="'+y+'" x2="'+boxX+'" y2="'+y+'" stroke="'+col+'" stroke-width="3"'
+        +(z.open?' stroke-dasharray="5 4"':'')+'/>';
+      s+='<rect x="'+boxX+'" y="'+boxY+'" width="'+boxW+'" height="'+boxH+'" rx="6" fill="'+fill
+        +'" stroke="'+col+'" stroke-width="1.5"'+(inactive?' opacity="0.55"':'')+'/>';
+      s+='<text x="'+(boxX+9)+'" y="'+(y-2)+'" font-size="11" font-weight="700" fill="var(--tx)">'+FieldMap.esc(z.name)+'</text>';
+      var status=z.open?(FieldMap.mmss(z.left_s)+' left'):(inactive?'inactive':'closed');
+      s+='<text x="'+(boxX+9)+'" y="'+(y+11)+'" font-size="9" fill="var(--tx2)">'+FieldMap.esc(status)+'</text>';
+    });
+    s+='</svg>';
+    el.innerHTML=s;
   }
 };
 
@@ -242,6 +296,7 @@ var Zones={
           +Zones.testButton(z,d)
           +'</div>';}
       UI.el('zones').innerHTML=h;
+      FieldMap.render(d);
     }).catch(function(){});
   },
   // --- Manage zones: add / rename / remap / delete -----------------------
@@ -1086,6 +1141,7 @@ UI.el('scanWrap').addEventListener('click',function(e){
   Net.join(decodeURIComponent(b.dataset.join), b.dataset.open==='1');
 });
 bind('btnZonesStopAll',function(){Zones.cmd({cmd:'stopall'});});
+bind('btnFmStopAll',function(){Zones.cmd({cmd:'stopall'});});
 bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanned').then(function(){
   Zones.poll();
   if(UI.el('zoneMgrDetails').open)Zones.loadManager();

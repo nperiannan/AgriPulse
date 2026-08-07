@@ -85,9 +85,19 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <ul id="chk" class="chk"><li><span>Loading&hellip;</span></li></ul>
     </div>
 
-    <div class="card">
-      <div class="ct">Zones <span id="zoneBadgeCtl" class="badge b-off">--</span></div>
-      <div id="chkZonesSummary" class="hint">Open the Zones tab to run or stop a valve.</div>
+    <div class="card full">
+      <div class="ct">Field Map <span id="zoneBadgeCtl" class="badge b-off">--</span></div>
+      <div class="fm-wrap">
+        <div id="fmMap" class="fm-map"></div>
+        <div class="fm-side">
+          <div class="fm-stat"><div class="fm-stat-lb">Current (peak phase)</div>
+            <div class="fm-stat-val" id="fmAmps">-- <small>A</small></div></div>
+          <div class="fm-stat"><div class="fm-stat-lb">Voltage R / Y / B</div>
+            <div class="fm-stat-val" id="fmVolts">-- / -- / -- <small>V</small></div></div>
+          <button class="btn-s btn-d" id="btnFmStopAll" style="width:100%">Stop all</button>
+        </div>
+      </div>
+      <div id="chkZonesSummary" class="hint" style="margin-top:8px">Open the Zones tab to manage or add zones.</div>
     </div>
    </div>
   </div>
