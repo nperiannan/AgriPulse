@@ -130,6 +130,13 @@ static void postProgramCmd() {
         apiSendOk();
         return;
     }
+    if (cmd == "toggle") {
+        ProgramState& p = programGet((uint8_t)id);
+        p.enabled = !p.enabled;
+        programSave((uint8_t)id);
+        apiSendOk();
+        return;
+    }
     if (cmd == "delete") {
         if (!programDelete((uint8_t)id)) { apiSendError("delete failed"); return; }
         apiSendOk();

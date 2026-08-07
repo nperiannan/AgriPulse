@@ -371,6 +371,8 @@ var Net={
 var DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var Progs={
   zoneNames:[],
+  lastData:null,
+  openIds:{},   // {id:true} — which programs currently show their full editor
   hhmm:function(m){var h=Math.floor(m/60),mi=m%60;return (h<10?'0':'')+h+':'+(mi<10?'0':'')+mi;},
   // {zoneId: minutes} for zones actually in this program (server still stores
   // all 8 as zoneMin[], 0 = not used — this just presents that as an explicit
@@ -410,27 +412,51 @@ var Progs={
     return Promise.all([Api.get('/api/programs'), Api.get('/api/zones')]).then(function(r){
       var d=r[0], zd=r[1];
       Progs.zoneNames=(zd.zones||[]).map(function(z){return z;});
+      Progs.lastData=d;
       UI.el('pd_source').value=d.defaults.source;
       UI.el('pd_seasonal').value=d.defaults.seasonalPct;
       UI.el('pd_rain').value=d.defaults.rainDelayDays;
-
-      var h='';
-      for(var i=0;i<d.programs.length;i++){var p=d.programs[i];
-        h+=Progs.card(p);
-      }
-      UI.el('progCards').innerHTML=h;
-      // Set selects/checkboxes that can't be expressed as static HTML attrs cleanly.
-      for(var j=0;j<d.programs.length;j++){var pp=d.programs[j];
-        UI.el('pg_src_'+j).value=pp.source;
-        UI.el('pg_daymode_'+j).value=pp.dayMode;
-        Progs.showDayFields(j,pp.dayMode);
-        for(var wd=0;wd<7;wd++){
-          var cb=UI.el('pg_day_'+j+'_'+wd);
-          if(cb)cb.checked=(pp.dayMask&(1<<wd))!==0;
-        }
-      }
-    }).catch(function(){UI.el('progCards').innerHTML='<div class="hint">Unavailable.</div>';});
+      Progs.render();
+    }).catch(function(){UI.el('progList').innerHTML='<div class="hint">Unavailable.</div>';});
   },
+  // Compact list (name, status, quick actions) always visible; the full
+  // editor for a program only appears once you press Edit on it — this is
+  // the two-tier layout from the original design, not a flat wall of cards.
+  render:function(){
+    var d=Progs.lastData; if(!d)return;
+    var lh='';
+    for(var i=0;i<d.programs.length;i++){var p=d.programs[i];
+      lh+='<div class="row"><span class="lb">'+p.name+' '
+        +(p.enabled?'<span class="badge b-ok">enabled</span>':'<span class="badge b-off">disabled</span>')
+        +(p.running?' <span class="badge b-ok">running &mdash; zone '+(p.currentZone+1)+'</span>':'')
+        +'</span>'
+        +'<button class="btn-s" data-ptoggle="'+p.id+'">'+(p.enabled?'Disable':'Enable')+'</button>'
+        +'<button class="btn-s" data-pedit="'+p.id+'">'+(Progs.openIds[p.id]?'Close':'Edit')+'</button>'
+        +'<button class="btn-s btn-d" data-pdel="'+p.id+'">Delete</button></div>';
+    }
+    UI.el('progList').innerHTML=lh||'<div class="hint">No programs yet — press + Add program.</div>';
+
+    var eh='';
+    for(var j=0;j<d.programs.length;j++){
+      if(Progs.openIds[d.programs[j].id]) eh+=Progs.card(d.programs[j]);
+    }
+    UI.el('progEditors').innerHTML=eh;
+    for(var k=0;k<d.programs.length;k++){var pp=d.programs[k];
+      if(!Progs.openIds[pp.id])continue;
+      UI.el('pg_src_'+pp.id).value=pp.source;
+      UI.el('pg_daymode_'+pp.id).value=pp.dayMode;
+      Progs.showDayFields(pp.id,pp.dayMode);
+      for(var wd=0;wd<7;wd++){
+        var cb=UI.el('pg_day_'+pp.id+'_'+wd);
+        if(cb)cb.checked=(pp.dayMask&(1<<wd))!==0;
+      }
+    }
+  },
+  toggleEdit:function(id){
+    if(Progs.openIds[id])delete Progs.openIds[id]; else Progs.openIds[id]=true;
+    Progs.render();
+  },
+  toggleEnabled:function(id){UI.act('/api/programs/cmd',{cmd:'toggle',id:id},null).then(Progs.load);},
   card:function(p){
     var running=p.running;
     var h='<div class="card">'
@@ -464,7 +490,6 @@ var Progs={
         +'<button class="btn" id="btnProgSave_'+p.id+'">Save program</button>'
         +(running?'<button class="btn-s btn-d" id="btnProgStop_'+p.id+'">Stop</button>'
                  :'<button class="btn-s" id="btnProgRun_'+p.id+'">Run now</button>')
-        +'<button class="btn-s btn-d" id="btnProgDelete_'+p.id+'">Delete</button>'
       +'</div></div>';
     return h;
   },
@@ -492,9 +517,20 @@ var Progs={
   stop:function(id){UI.act('/api/programs/cmd',{cmd:'stop',id:id},'Stopped').then(Progs.load);},
   del:function(id){
     if(!window.confirm('Delete this program? This cannot be undone.'))return;
-    UI.act('/api/programs/cmd',{cmd:'delete',id:id},'Deleted').then(Progs.load);
+    UI.act('/api/programs/cmd',{cmd:'delete',id:id},'Deleted').then(function(){
+      // Deleting shifts every later id down server-side, so any open editor
+      // keyed by a stale id would now show the wrong program. Safer to just
+      // close everything than risk that.
+      Progs.openIds={};
+      Progs.load();
+    });
   },
-  add:function(){UI.act('/api/programs/cmd',{cmd:'create'},'Program added').then(Progs.load);}
+  add:function(){
+    UI.act('/api/programs/cmd',{cmd:'create'},'Program added').then(function(d){
+      if(d&&d.id!==undefined)Progs.openIds[d.id]=true;   // open it immediately, nothing to configure otherwise
+      return Progs.load();
+    });
+  }
 };
 
 /* ---- History ---- */
@@ -663,7 +699,11 @@ bind('btnProgDefaultsSave',function(){
   UI.act('/api/programs/cmd',{cmd:'defaults',source:UI.el('pd_source').value,
     seasonalPct:UI.el('pd_seasonal').value,rainDelayDays:UI.el('pd_rain').value},'Defaults saved').then(Progs.load);
 });
-UI.el('progCards').addEventListener('click',function(e){
+UI.el('progArea').addEventListener('click',function(e){
+  var tgl=e.target.closest('button[data-ptoggle]'); if(tgl){Progs.toggleEnabled(tgl.dataset.ptoggle);return;}
+  var edit=e.target.closest('button[data-pedit]');   if(edit){Progs.toggleEdit(edit.dataset.pedit);return;}
+  var pdel=e.target.closest('button[data-pdel]');    if(pdel){Progs.del(pdel.dataset.pdel);return;}
+
   var addBtn=e.target.closest('button[data-zadd]');
   if(addBtn){
     var pid=addBtn.dataset.pid, sel=UI.el('pg_addzone_'+pid);
@@ -680,12 +720,11 @@ UI.el('progCards').addEventListener('click',function(e){
     return;
   }
   var b=e.target.closest('button[id]'); if(!b)return;
-  var m=b.id.match(/^btnProg(Save|Run|Stop|Delete)_(\d+)$/); if(!m)return;
+  var m=b.id.match(/^btnProg(Save|Run|Stop)_(\d+)$/); if(!m)return;
   var id=parseInt(m[2],10);
   if(m[1]==='Save')Progs.save(id);
   else if(m[1]==='Run')Progs.run(id);
-  else if(m[1]==='Stop')Progs.stop(id);
-  else Progs.del(id);
+  else Progs.stop(id);
 });
 bind('btnProgAdd',Progs.add);
 bind('btnHistRefresh',Hist.load);
