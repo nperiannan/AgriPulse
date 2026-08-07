@@ -284,23 +284,25 @@ static void handleUGMotor() {
 //  GET /wifiscan  – run a fresh scan and return visible APs as JSON
 // ---------------------------------------------------------------------------
 
+// Submit/poll pattern, not a blocking call: WiFi scanning is owned entirely
+// by wifiTask on Core 0 (see WiFiManager.cpp). This handler used to call
+// WiFi.scanNetworks(false,true) directly from here (Core 1, the single-
+// threaded web server's task) — that raced the reconnect state machine's own
+// scans on Core 0 for the one ESP-IDF scan slot, which is what caused
+// "Scan failed or timed out" in the UI. This just queues the request and
+// returns instantly; the browser polls /wifiscanresult for completion.
 static void handleWifiScan() {
-    int found = WiFi.scanNetworks(false, true);   // blocking, show hidden
-    String json = "[";
-    for (int i = 0; i < found; i++) {
-        if (i > 0) json += ",";
-        // Escape SSID for JSON
-        String s = WiFi.SSID(i);
-        s.replace("\\", "\\\\"); s.replace("\"", "\\\"");
-        bool open = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
-        json += "{\"ssid\":\"" + s + "\","
-                "\"rssi\":"    + String(WiFi.RSSI(i)) + ","
-                "\"ch\":"      + String(WiFi.channel(i)) + ","
-                "\"open\":"    + (open ? "true" : "false") + "}";
+    wifiRequestManualScan();
+    server.send(200, "application/json", "{\"status\":\"scanning\"}");
+}
+
+static void handleWifiScanResult() {
+    if (!wifiManualScanReady()) {
+        server.send(200, "application/json", "{\"ready\":false}");
+        return;
     }
-    json += "]";
-    WiFi.scanDelete();
-    server.send(200, "application/json", json);
+    server.send(200, "application/json",
+                "{\"ready\":true,\"networks\":" + wifiManualScanResultJson() + "}");
 }
 
 // ---------------------------------------------------------------------------
@@ -701,6 +703,7 @@ void setupWebServer() {
     guarded("/motor",              HTTP_GET,  handleOHMotor);          // legacy: -> Well
     guarded("/undergroundmotor",   HTTP_GET,  handleUGMotor);          // legacy: -> Bore
     guarded("/wifiscan",           HTTP_GET,  handleWifiScan);
+    guarded("/wifiscanresult",     HTTP_GET,  handleWifiScanResult);
     guarded("/wifilist",           HTTP_GET,  handleWifiList);
     guarded("/addwifi",            HTTP_POST, handleAddWifi);
     guarded("/setwifipriority",    HTTP_POST, handleSetWifiPriority);

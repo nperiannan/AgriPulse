@@ -371,17 +371,30 @@ var Net={
   scan:function(){
     var w=UI.el('scanWrap');
     w.innerHTML='<div class="hint">Scanning… the hub pauses briefly while its radio sweeps.</div>';
-    // Longer timeout: a full scan blocks the radio for several seconds.
-    Api.fetchT('/wifiscan',null,20000).then(function(r){return r.json();}).then(function(a){
-      if(!a||!a.length){w.innerHTML='<div class="hint">No networks found. Try again — the hub’s own AP can mask weak signals.</div>';return;}
-      a.sort(function(x,y){return y.rssi-x.rssi;});
-      var h='<div class="hint" style="margin:6px 0 4px">Found '+a.length+' network'+(a.length>1?'s':'')+' — pick one to join.</div>';
-      for(var i=0;i<a.length;i++){var n=a[i];
-        h+='<div class="row"><span class="lb">'+n.ssid+(n.open?' <span class="badge b-warn">open</span>':'')+
-           '</span><span class="dt">'+Net.bars(n.rssi)+' · ch'+n.ch+'</span>'+
-           '<button class="btn-s" data-join="'+encodeURIComponent(n.ssid)+'" data-open="'+(n.open?1:0)+'">Join</button></div>';}
-      w.innerHTML=h;
+    // Submit/poll: /wifiscan just queues the request on the hub's WiFi task
+    // and returns instantly, so it never fights the hub's own background
+    // reconnect scan for the radio. Poll /wifiscanresult until ready.
+    Api.fetchT('/wifiscan',null,6000).then(function(){
+      var deadline=Date.now()+15000;
+      (function poll(){
+        Api.fetchT('/wifiscanresult',null,6000).then(function(r){return r.json();}).then(function(d){
+          if(d&&d.ready){Net.renderScan(d.networks||[]);return;}
+          if(Date.now()>deadline){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';return;}
+          setTimeout(poll,600);
+        }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';});
+      })();
     }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';});
+  },
+  renderScan:function(a){
+    var w=UI.el('scanWrap');
+    if(!a||!a.length){w.innerHTML='<div class="hint">No networks found. Try again — the hub’s own AP can mask weak signals.</div>';return;}
+    a.sort(function(x,y){return y.rssi-x.rssi;});
+    var h='<div class="hint" style="margin:6px 0 4px">Found '+a.length+' network'+(a.length>1?'s':'')+' — pick one to join.</div>';
+    for(var i=0;i<a.length;i++){var n=a[i];
+      h+='<div class="row"><span class="lb">'+n.ssid+(n.open?' <span class="badge b-warn">open</span>':'')+
+         '</span><span class="dt">'+Net.bars(n.rssi)+' · ch'+n.ch+'</span>'+
+         '<button class="btn-s" data-join="'+encodeURIComponent(n.ssid)+'" data-open="'+(n.open?1:0)+'">Join</button></div>';}
+    w.innerHTML=h;
   },
   join:function(ssid,isOpen){
     var pass='';

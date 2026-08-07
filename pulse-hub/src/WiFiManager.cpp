@@ -100,7 +100,19 @@ static unsigned long smCooldownUntilMs = 0;
 // paying the 15-minute cooldown for what may just have been a flaky scan.
 #define WIFI_EMPTY_SCAN_MAX_RETRIES 3
 static int smEmptyScanRetries = 0;
-static bool          smScanPending     = false; // async scan in progress
+static bool          smScanPending     = false; // async scan in progress (shared radio resource)
+
+// Manual scan requested by the web UI's "Scan for networks" button. Runs
+// through this same task/radio instead of a raw WiFi.scanNetworks() call from
+// HttpServer.cpp (Core 1) — two tasks driving the single ESP-IDF scan state
+// concurrently is what caused "Scan failed or timed out": the manual blocking
+// scan and this task's own async reconnect-gate scan would stomp on each
+// other's scan-in-progress state. smScanPending is the single shared "radio
+// busy scanning" flag both paths respect, so only one scan ever runs at a time.
+static volatile bool smManualScanRequested = false;
+static bool          smScanIsManual        = false;
+static volatile bool smManualScanReady     = false;
+static String        smManualScanJson      = "[]"; // guarded by wifiMutex
 
 // NTP
 static WiFiUDP       ntpUDP;
@@ -119,6 +131,7 @@ typedef enum : uint8_t {
     WCMD_REMOVE_NETWORK,
     WCMD_SET_PRIORITY,
     WCMD_SYNC_TIME,
+    WCMD_MANUAL_SCAN,
 } WifiCmd;
 
 struct WifiCmdMsg {
@@ -326,6 +339,25 @@ static void handleSetPriority(const char* ssid, int newPriority) {
     saveNetworks();
 }
 
+// Builds the same JSON shape the old blocking /wifiscan handler returned,
+// from an already-completed scan result (found = WiFi.scanComplete() result,
+// > 0 or 0; never call with WIFI_SCAN_RUNNING/WIFI_SCAN_FAILED).
+static String buildScanResultJson(int found) {
+    String json = "[";
+    for (int i = 0; i < found; i++) {
+        if (i > 0) json += ",";
+        String s = WiFi.SSID(i);
+        s.replace("\\", "\\\\"); s.replace("\"", "\\\"");
+        bool open = (WiFi.encryptionType(i) == WIFI_AUTH_OPEN);
+        json += "{\"ssid\":\"" + s + "\","
+                "\"rssi\":"    + String(WiFi.RSSI(i)) + ","
+                "\"ch\":"      + String(WiFi.channel(i)) + ","
+                "\"open\":"    + (open ? "true" : "false") + "}";
+    }
+    json += "]";
+    return json;
+}
+
 // ---------------------------------------------------------------------------
 //  WiFi task -- runs on Core 0, never exits
 // ---------------------------------------------------------------------------
@@ -387,7 +419,36 @@ static void wifiTask(void* /*param*/) {
                 case WCMD_REMOVE_NETWORK: handleRemoveNetwork(msg.ssid); break;
                 case WCMD_SET_PRIORITY:   handleSetPriority(msg.ssid, msg.priority); break;
                 case WCMD_SYNC_TIME:      doSynchronizeTime(); break;
+                case WCMD_MANUAL_SCAN:    smManualScanRequested = true; smManualScanReady = false; break;
             }
+        }
+
+        // --- Manual scan (web UI "Scan for networks") ---------------------
+        // Independent of connect state (works whether STA is connected or
+        // not) and independent of the reconnect state machine below. Shares
+        // smScanPending as the single "radio is scanning" gate so this task
+        // never has two scans in flight against each other, and HttpServer.cpp
+        // never touches WiFi.scanNetworks() directly (that cross-core call is
+        // what caused "Scan failed or timed out" in the first place).
+        if (smScanIsManual) {
+            int found = WiFi.scanComplete();
+            if (found != WIFI_SCAN_RUNNING) {
+                String json = buildScanResultJson(found < 0 ? 0 : found);
+                WiFi.scanDelete();
+                xSemaphoreTake(wifiMutex, portMAX_DELAY);
+                smManualScanJson = json;
+                xSemaphoreGive(wifiMutex);
+                smScanIsManual    = false;
+                smScanPending     = false;
+                smManualScanReady = true;
+                Log(INFO, "[WiFi] Manual scan complete: " + String(found < 0 ? 0 : found) + " networks");
+            }
+        } else if (smManualScanRequested && !smScanPending) {
+            smManualScanRequested = false;
+            smScanPending  = true;
+            smScanIsManual = true;
+            WiFi.scanNetworks(true, true);
+            Log(INFO, "[WiFi] Manual scan started (web UI request)");
         }
 
         bool nowConnected = (WiFi.status() == WL_CONNECTED);
@@ -585,6 +646,31 @@ void synchronizeTime() {
     WifiCmdMsg msg;
     msg.cmd = WCMD_SYNC_TIME;
     xQueueSend(cmdQueue, &msg, 0);
+}
+
+// Manual WiFi scan (web UI "Scan for networks"). Submit/poll pattern: this
+// only queues the request and returns immediately — HttpServer.cpp never
+// blocks its own task waiting on the radio, and never calls WiFi.scanNetworks()
+// itself. See buildScanResultJson()/wifiTask() for where the scan actually runs.
+void wifiRequestManualScan() {
+    if (cmdQueue == nullptr) return;
+    smManualScanReady = false;
+    WifiCmdMsg msg;
+    msg.cmd = WCMD_MANUAL_SCAN;
+    xQueueSend(cmdQueue, &msg, 0);
+}
+
+bool wifiManualScanReady() {
+    return smManualScanReady;
+}
+
+// Consumes the ready flag — call only after wifiManualScanReady() is true.
+String wifiManualScanResultJson() {
+    xSemaphoreTake(wifiMutex, portMAX_DELAY);
+    String json = smManualScanJson;
+    xSemaphoreGive(wifiMutex);
+    smManualScanReady = false;
+    return json;
 }
 
 bool hasNtpSynced() {

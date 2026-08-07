@@ -7,6 +7,11 @@ void initWiFi();
 void checkWiFiConnection();
 void synchronizeTime();
 
+// Manual scan (web UI): submit/poll, never blocks the calling task.
+void   wifiRequestManualScan();
+bool   wifiManualScanReady();
+String wifiManualScanResultJson();   // consumes the ready flag
+
 bool     hasNtpSynced();
 int32_t  getNtpDriftSeconds();
 uint32_t getNtpSyncAgeSeconds();
