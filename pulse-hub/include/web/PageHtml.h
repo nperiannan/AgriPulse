@@ -271,6 +271,18 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <button class="btn-s" id="btnOtaPass">Set</button>
         <div class="hint">Must match the --auth used when uploading. Applies after reboot.</div></div>
     </div>
+    <div class="card">
+      <div class="ct">I2C Expansion Boards</div>
+      <div class="hint" style="margin-bottom:7px">A relay board and an LCD backpack use the same chip and are
+        otherwise indistinguishable on the bus — declaring an address here as an expansion board keeps it from
+        ever being mistaken for the LCD, regardless of what else is connected at boot.</div>
+      <div id="i2cExpList"></div>
+      <div class="row" style="border:none;flex-wrap:wrap">
+        <input id="i2cexp_addr" class="inp" placeholder="0x20" list="i2cexp_suggest" style="width:100px">
+        <datalist id="i2cexp_suggest"></datalist>
+        <button class="btn-s" id="btnI2cExpAdd">+ Declare as expansion board</button>
+      </div>
+    </div>
    </div>
   </div>
 

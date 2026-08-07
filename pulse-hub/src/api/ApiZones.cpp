@@ -3,9 +3,11 @@
 #include "Zones.h"
 #include "ValveController.h"
 #include "MotorDrive.h"
+#include "Display.h"     // getLcdAddress() — used by getI2cExpansion()'s live scan
 #include "Logger.h"
 
 #include <ArduinoJson.h>
+#include <Wire.h>
 
 // GET  /api/zones       — live zone state, detected boards, interlock limits
 // POST /api/zones/cmd   — run / stop / stopall / rename / rescan / create /
@@ -36,8 +38,11 @@ static void getZones() {
     doc["stop_reason"]      = zoneStopCauseName(zoneLastStopCause());
     doc["stop_zone"]        = zoneLastStopZoneName();
 
-    // Detected boards, for the zone-creation/remap channel picker — each
-    // board contributes channels [b*8 .. b*8+7].
+    // Board slots, for the zone-creation/remap channel picker — each
+    // contributes channels [b*8 .. b*8+7]. Slot index is stable (declared
+    // order), not scan order — "Expansion Board #(b+1)" in the UI is
+    // literally b+1. present=false means declared but not answering right
+    // now, distinct from not existing at all.
     JsonArray boardsArr = doc.createNestedArray("boards");
     for (uint8_t b = 0; b < valveBoardCount(); b++) {
         JsonObject bo = boardsArr.createNestedObject();
@@ -46,6 +51,7 @@ static void getZones() {
         snprintf(addrStr, sizeof(addrStr), "0x%02X", valveBoardAddr(b));
         bo["addr"]    = addrStr;
         bo["backend"] = valveBackendName(valveBoardBackend(b));
+        bo["present"] = valveBoardPresent(b);
     }
 
     JsonArray arr = doc.createNestedArray("zones");
@@ -154,7 +160,86 @@ static void postZoneCmd() {
     apiSendError("unknown command");
 }
 
+// GET  /api/i2cexp       — declared expansion-board addresses + a live scan
+// POST /api/i2cexp/cmd   — add / remove a declared address
+//
+// Shown on the Network tab: declaring an address here is what keeps
+// Display.cpp's LCD probe from ever mistaking a relay board for the LCD (see
+// ValveController.h) — it is a safety statement, not what makes the relay
+// board itself work; valveInit()'s own detection finds real boards by
+// probing for the chip regardless of what's declared here.
+static void getI2cExpansion() {
+    StaticJsonDocument<1024> doc;
+    // Declared addresses occupy board slots 0..valveDeclaredCount()-1 in
+    // declared order (see ValveController.cpp's detectBoards()) — board+1 is
+    // exactly the "Expansion Board #N" number shown in the UI, and it never
+    // changes across reboots or rescans regardless of what is or isn't
+    // plugged in at any given moment.
+    JsonArray declared = doc.createNestedArray("declared");
+    for (uint8_t i = 0; i < valveDeclaredCount(); i++) {
+        JsonObject o = declared.createNestedObject();
+        o["board"]   = i;
+        o["addr"]    = valveDeclaredAddr(i);
+        o["present"] = valveBoardPresent(i);
+        o["backend"] = valveBoardPresent(i) ? valveBackendName(valveBoardBackend(i)) : "";
+    }
+
+    // A live scan of the two ranges a relay board can actually answer in, so
+    // the UI can offer "here's what's on the bus right now" rather than
+    // making the user type a hex address from memory. Excludes whatever
+    // Display.cpp currently holds as the LCD, and anything already declared.
+    JsonArray seen = doc.createNestedArray("detected");
+    uint8_t lcd = getLcdAddress();
+    const uint8_t ranges[] = {0x20,0x21,0x22,0x23,0x24,0x25,0x26,0x27,
+                              0x38,0x39,0x3A,0x3B,0x3C,0x3D,0x3E,0x3F};
+    for (uint8_t a : ranges) {
+        if (a == lcd || valveIsDeclaredExpansion(a)) continue;
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) seen.add(a);
+    }
+    String out;
+    serializeJson(doc, out);
+    apiSendJson(200, out);
+}
+
+static void postI2cExpansionCmd() {
+    if (!apiServer.hasArg("addr")) { apiSendError("addr required"); return; }
+    String addrStr = apiServer.arg("addr");
+    int addr = addrStr.startsWith("0x") || addrStr.startsWith("0X")
+             ? strtol(addrStr.c_str(), nullptr, 16)
+             : addrStr.toInt();
+    if (addr <= 0 || addr > 0xFF) { apiSendError("invalid address"); return; }
+
+    String cmd = apiServer.arg("cmd");
+    if (cmd == "add") {
+        // Specific reasons, not one catch-all — "already declared" reads as a
+        // bug ("I just tried to add it and it says no") when it is actually
+        // confirmation the address is already configured correctly.
+        bool inRange = (addr >= 0x20 && addr <= 0x27) || (addr >= 0x38 && addr <= 0x3F);
+        if (!inRange) { apiSendError("address must be 0x20-0x27 or 0x38-0x3F"); return; }
+        if (valveIsDeclaredExpansion((uint8_t)addr)) {
+            apiSendError(("0x" + String(addr, HEX) + " is already declared").c_str()); return;
+        }
+        if (valveDeclaredCount() >= VALVE_DECLARED_MAX) {
+            apiSendError(("limit of " + String(VALVE_DECLARED_MAX) + " declared boards reached").c_str()); return;
+        }
+        if (!valveAddDeclaredExpansion((uint8_t)addr)) {
+            apiSendError("could not declare that address"); return;   // should not happen given the checks above
+        }
+        apiSendOk();
+        return;
+    }
+    if (cmd == "remove") {
+        if (!valveRemoveDeclaredExpansion((uint8_t)addr)) { apiSendError("not declared"); return; }
+        apiSendOk();
+        return;
+    }
+    apiSendError("unknown command");
+}
+
 void registerZoneApi(RouteRegistrar on) {
-    on("/api/zones",     HTTP_GET,  getZones);
-    on("/api/zones/cmd", HTTP_POST, postZoneCmd);
+    on("/api/zones",       HTTP_GET,  getZones);
+    on("/api/zones/cmd",   HTTP_POST, postZoneCmd);
+    on("/api/i2cexp",      HTTP_GET,  getI2cExpansion);
+    on("/api/i2cexp/cmd",  HTTP_POST, postI2cExpansionCmd);
 }

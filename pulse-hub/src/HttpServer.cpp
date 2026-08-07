@@ -153,7 +153,13 @@ static const char* resetReasonStr() {
 }
 
 static void handleStatus() {
-    StaticJsonDocument<1280> doc;
+    // Was 1280 — silently overflowed the moment btMacAddress was added
+    // (ArduinoJson drops fields past capacity with no error, not a crash),
+    // which is why i2cScl/boardRev went missing from the response without
+    // any compile or runtime error to point at it. Found live: the System
+    // tab showed "undefined" for both while everything added before them in
+    // this function still worked fine.
+    StaticJsonDocument<2048> doc;
     doc["ugState"]           = tankStateStr(ugTankState);
     doc["ohState"]           = tankStateStr(ohTankState);
     doc["ohLastKnown"]       = tankStateStr(ohLastKnownState);

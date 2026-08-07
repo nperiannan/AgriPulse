@@ -5,6 +5,7 @@
 #include "LoRaManager.h"
 #include "WiFiManager.h"
 #include "MotorControl.h"
+#include "ValveController.h"   // valveIsDeclaredExpansion() — see findLcdAddress()
 #include <Wire.h>
 #include <WiFi.h>
 #include <LiquidCrystal_I2C.h>
@@ -169,6 +170,14 @@ static uint8_t findLcdAddress() {
         0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E
     };
     for (uint8_t a : candidates) {
+        // An address the user has explicitly declared an expansion (relay)
+        // board — via the web UI, Network tab — is never the LCD, full stop.
+        // Without this, a PCF8574 relay board and a PCF8574 LCD backpack are
+        // indistinguishable over I2C (same chip, no way to ask "what are you
+        // wired to"), so the first one found wins — wrong the moment a relay
+        // board happens to answer before the real LCD does (e.g. bench-
+        // testing a new board before the LCD is reconnected).
+        if (valveIsDeclaredExpansion(a)) continue;
         Wire.beginTransmission(a);
         if (Wire.endTransmission() == 0) return a;
     }

@@ -159,8 +159,9 @@ var Zones={
   chLabel:function(ch,d){
     var b=Math.floor(ch/8), local=ch%8;
     var board=(d.boards||[]).filter(function(x){return x.board===b;})[0];
-    return board?('ch '+ch+' ('+board.backend+' @'+board.addr+', local '+local+')')
-                :('ch '+ch+' (no board)');
+    return board?('ch '+ch+' (Expansion Board #'+(b+1)+' relay '+(local+1)
+                  +(board.present?'':' — not detected')+')')
+                :('ch '+ch+' (no board declared)');
   },
   poll:function(){
     return Api.get('/api/zones').then(function(d){
@@ -185,7 +186,7 @@ var Zones={
       else sb.style.display='none';
 
       var boardSummary=d.fully_simulated?'simulated'
-        :(d.boards||[]).map(function(x){return x.backend+' @'+x.addr;}).join(', ')||'no board';
+        :(d.boards||[]).map(function(x){return x.present?(x.backend+' @'+x.addr):(x.addr+' missing');}).join(', ')||'no board';
       var badgeText=d.open_count+' of '+d.max_open+' open \u00b7 '+boardSummary;
       var badgeClass='badge '+(d.bus_fault?'b-err':d.open_count?'b-ok':'b-off');
       var b=UI.el('zoneBadge'); b.textContent=badgeText; b.className=badgeClass;
@@ -243,8 +244,8 @@ var Zones={
     var bh=d.fully_simulated
       ? 'No valve board detected \u2014 every channel below is a simulated placeholder for bench testing.'
       : (d.boards&&d.boards.length
-          ? d.boards.length+' board(s): '+d.boards.map(function(x){return x.backend+' @'+x.addr+' (ch '
-              +(x.board*8)+'-'+(x.board*8+7)+')';}).join(', ')
+          ? d.boards.map(function(x){return 'Expansion Board #'+(x.board+1)+' ('+x.addr
+              +(x.present?', '+x.backend:', not detected')+', ch '+(x.board*8)+'-'+(x.board*8+7)+')';}).join(' \u00b7 ')
           : 'No board detected and nothing is simulated \u2014 this should not happen; press Rescan.');
     UI.el('zoneBoards').textContent=bh;
 
@@ -487,6 +488,7 @@ var Net={
       var u=UI.el('web_user_inp');
       if(u){u.placeholder=d.webUser||'user';}
     }).catch(function(){});
+    I2cExp.load();
   },
   wifiAction:function(act,ssid,pri){
     if(act==='del'){
@@ -546,6 +548,49 @@ var Net={
       UI.el('scanWrap').innerHTML='';
       Net.load();
     });
+  }
+};
+
+/* ---- I2C expansion board declarations (Network tab) ---- */
+var I2cExp={
+  load:function(){
+    return Api.get('/api/i2cexp').then(function(d){
+      var lh='';
+      // Board numbering is stable (declared order) — #1 always means
+      // declared[0], whether or not it happens to answer right now. This is
+      // also what zones map to (see Zones.chLabel), so the number shown here
+      // is exactly the one that appears in the zone channel picker.
+      (d.declared||[]).forEach(function(b){
+        lh+='<div class="row"><span class="lb">Expansion Board #'+(b.board+1)+' &mdash; 0x'
+          +b.addr.toString(16).toUpperCase()
+          +(b.present?' <span class="badge b-ok">'+b.backend+'</span>':' <span class="badge b-err">not detected</span>')
+          +'</span><button class="btn-s btn-d" data-i2cdel="'+b.addr+'">Remove</button></div>';
+      });
+      UI.el('i2cExpList').innerHTML=lh||'<div class="hint">None declared yet — every expansion (relay) '+
+        'board is auto-detected on its own, but declaring its address here guarantees it can never be '+
+        'mistaken for the LCD.</div>';
+
+      // Suggestions only, not a hard restriction — the input still takes
+      // free-text hex so an address can be declared before its board is even
+      // powered up, which is the exact bench-testing case this exists for.
+      var opts='';
+      (d.detected||[]).forEach(function(a){opts+='<option value="0x'+a.toString(16).toUpperCase()+'">';});
+      UI.el('i2cexp_suggest').innerHTML=opts;
+    }).catch(function(){});
+  },
+  add:function(){
+    var raw=UI.el('i2cexp_addr').value.trim();
+    if(!raw){UI.toast('Enter an address, e.g. 0x20','err');return;}
+    UI.act('/api/i2cexp/cmd',{cmd:'add',addr:raw},'Declared').then(function(r){
+      // Refresh the list either way — on failure this is what surfaces
+      // "oh, it's already declared" instead of leaving a stale "None
+      // declared yet" on screen contradicting the error toast.
+      I2cExp.load();
+      if(r&&r.ok)UI.el('i2cexp_addr').value='';
+    });
+  },
+  remove:function(addr){
+    UI.act('/api/i2cexp/cmd',{cmd:'remove',addr:addr},'Removed').then(I2cExp.load);
   }
 };
 
@@ -910,8 +955,7 @@ var Sys={
         Sys.row('Bluetooth','disabled — not built into this firmware');
 
       var none=!d.rtcOk&&!d.lcdAddr&&!d.eepromOk;
-      UI.el('sysPeriph').innerHTML=
-        Sys.row('Board revision',d.boardRev+' &mdash; SDA GPIO'+d.i2cSda+', SCL GPIO'+d.i2cScl)+
+      var fixedRows=
         Sys.row('RTC (DS3231)',d.rtcOk?('OK @ '+Sys.hex(d.rtcAddr)):'<span style="color:var(--err)">not detected</span>')+
         Sys.row('LCD',d.lcdAddr?('OK @ '+Sys.hex(d.lcdAddr)):'<span style="color:var(--err)">not detected</span>')+
         Sys.row('EEPROM (history)',d.eepromOk?('OK @ '+Sys.hex(d.eepromAddr)):'<span style="color:var(--err)">not detected</span>')+
@@ -921,6 +965,21 @@ var Sys={
           '(a full 0x08&ndash;0x77 scan found zero devices), so this is the bus itself, not three failed parts. '+
           'Check: 4.7k&ohm; pull-ups from SDA and SCL to 3.3&nbsp;V (the ESP32 internal ones are ~45k&ohm; and are often '+
           'too weak over jumper wire), 3.3&nbsp;V and GND actually present at each module, and both signal wires seated.</div>':'');
+      UI.el('sysPeriph').innerHTML=fixedRows;
+
+      // Declared expansion (relay) boards — configured on the Network tab,
+      // shown here read-only alongside the other I2C peripherals. Board
+      // numbering is stable (declared order), so "#1" always means the same
+      // physical board even if it's the one currently unplugged.
+      Api.get('/api/i2cexp').then(function(e){
+        var eh='';
+        (e.declared||[]).forEach(function(b){
+          eh+=Sys.row('Expansion Board #'+(b.board+1),
+            b.present?('OK @ '+Sys.hex(b.addr)+' ('+b.backend+')')
+                     :('<span style="color:var(--err)">not detected</span> (declared @ '+Sys.hex(b.addr)+')'));
+        });
+        UI.el('sysPeriph').innerHTML=fixedRows+eh;
+      }).catch(function(){});
     }).catch(function(){});
   },
   // On-demand I2C bus scan. Separate from the passive RTC/LCD/EEPROM status
@@ -1109,6 +1168,12 @@ bind('btnHistRefresh',Hist.load);
 bind('btnHistClear',function(){UI.act('/clearhistory',{},'History cleared').then(Hist.load);});
 bind('btnAddWifi',function(){
   UI.act('/addwifi',{ssid:UI.el('wSsid').value,password:UI.el('wPass').value},'Network added').then(Net.load);});
+bind('btnI2cExpAdd',I2cExp.add);
+UI.el('i2cExpList').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-i2cdel]');
+  if(!b)return;
+  I2cExp.remove(b.dataset.i2cdel);
+});
 bind('btnSaveMqtt',function(){
   UI.act('/setmqttbroker',{broker:UI.el('mq_host').value,port:UI.el('mq_port').value},'MQTT saved');});
 bind('btnWebPass',function(){var p=UI.el('web_pass_inp').value;

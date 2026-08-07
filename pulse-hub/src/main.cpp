@@ -92,6 +92,12 @@ void setup() {
     // establishing whether the bus is alive at all.
     i2cDiagnoseBothPinouts();
 
+    // Loads the declared expansion-board address list (NVS only, no I2C
+    // traffic) — must run before initDisplay(), whose LCD probe consults it
+    // via valveIsDeclaredExpansion() so a declared relay board can never be
+    // mistaken for the LCD on this or any later boot.
+    valveConfigInit();
+
     initRTC();
     initBuzzer();
     initDisplay();

@@ -49,13 +49,18 @@ void valveInit();
 // does not require a reboot.
 void valveRescan();
 
-bool    valveHardwarePresent();     // true if at least one real board answered
-bool    valveFullySimulated();      // true if zero real boards — every channel is virtual
-uint8_t valveBoardCount();          // real boards found, 0 in fully-simulated mode
+bool    valveHardwarePresent();     // true if at least one board slot is present right now
+bool    valveFullySimulated();      // true if NOTHING is declared or detected — every channel is virtual
+uint8_t valveBoardCount();          // number of SLOTS (declared, in order, then auto-detected extras) —
+                                     // not the same as how many actually answered; see valveBoardPresent()
 
-// Per-board info, 0 <= b < valveBoardCount().
+// Per-slot info, 0 <= b < valveBoardCount(). Declared addresses occupy
+// slots 0..valveDeclaredCount()-1 in declared order — "Expansion Board #N"
+// in the UI is slot N-1 — regardless of whether they answer this boot;
+// anything auto-detected but undeclared is appended after.
 uint8_t      valveBoardAddr(uint8_t b);
 ValveBackend valveBoardBackend(uint8_t b);
+bool         valveBoardPresent(uint8_t b);   // false = declared but not answering right now
 const char*  valveBackendName(ValveBackend be);
 
 // True if this global channel can actually be driven right now — either a
@@ -76,5 +81,42 @@ void valveAllClosed();
 
 bool    valveIsOpen(uint8_t ch);
 uint8_t valveOpenCount();
+
+// ---------------------------------------------------------------------------
+//  Declared expansion-board addresses (web UI, Network tab)
+//
+//  A PCF8574 with an LCD backpack on it and a bare PCF8574 driving a relay
+//  board are electrically identical — I2C has no way to ask a chip "what are
+//  you soldered to". Display.cpp's LCD probe therefore just takes the first
+//  PCF8574/PCF8574A-shaped address that answers, which is right as long as
+//  the real LCD is on the bus every boot, but wrong the moment a relay board
+//  ends up being the only (or first-found) PCF8574 present — exactly what
+//  happens bench-testing a new board before the LCD is reconnected.
+//
+//  This lets the address be declared explicitly instead of inferred: once an
+//  address is here, Display.cpp's probe skips it unconditionally, so a relay
+//  board can never be mistaken for the LCD again regardless of scan order or
+//  what else is or isn't connected that boot. valveInit()'s own board
+//  detection is unaffected either way — it already finds real boards by
+//  probing for the chip, not from this list; declaring an address here is a
+//  safety statement ("this is never the display"), not what makes detection
+//  work.
+// ---------------------------------------------------------------------------
+#define VALVE_DECLARED_MAX 4
+
+// Load the declared list from NVS. Call once from setup(), BEFORE
+// initDisplay() — that's the only consumer, and it needs the list already
+// loaded the first time it probes the bus.
+void valveConfigInit();
+
+uint8_t valveDeclaredCount();
+uint8_t valveDeclaredAddr(uint8_t i);
+bool    valveIsDeclaredExpansion(uint8_t addr);
+
+// Both persist immediately. add() refuses a duplicate, an address outside
+// the two ranges a relay board can actually live at (0x20-0x27, 0x38-0x3F),
+// or VALVE_DECLARED_MAX already reached.
+bool valveAddDeclaredExpansion(uint8_t addr);
+bool valveRemoveDeclaredExpansion(uint8_t addr);
 
 #endif // VALVE_CONTROLLER_H
