@@ -4,7 +4,7 @@
 // =============================================================================
 //                              FIRMWARE VERSION
 // =============================================================================
-#define FW_VERSION "2.12.9"
+#define FW_VERSION "2.12.10"
 
 // Known transmitter firmware version (update here when transmitter is reflashed).
 #define TRANSMITTER_FW_VERSION "2.0.0"
@@ -283,7 +283,7 @@
 #define WIFI_CHECK_INTERVAL_MS    30000UL
 #define WIFI_ATTEMPT_TIMEOUT_MS   10000UL   // wait up to 10 s per connection attempt
 #define WIFI_MAX_ATTEMPTS_PER_NET 3          // attempts per SSID before trying next
-#define WIFI_COOLDOWN_MS          900000UL   // 15-min pause after all SSIDs fail
+#define WIFI_COOLDOWN_MS         1800000UL   // 30-min pause after all SSIDs fail 3x each
 #define NTP_SYNC_INTERVAL_MS    3600000UL
 #define BLE_STATUS_INTERVAL_MS    5000UL
 #define BUZZER_MAX_DURATION_MS      35000UL   // Auto-stop buzzer after 35 s

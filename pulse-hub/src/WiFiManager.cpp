@@ -93,14 +93,6 @@ static unsigned long smNextActionMs    = 0;
 static bool          smInCooldown      = false;
 static unsigned long smCooldownUntilMs = 0;
 
-// Escalating reconnect cooldown. A transient failure (router rebooting, a burst
-// of interference) recovers in a minute instead of stranding the device for a
-// full 15, while a genuinely absent network still settles into a slow retry
-// rhythm rather than hammering the shared radio and starving the softAP.
-// Reset to the floor on every successful association.
-#define WIFI_COOLDOWN_MIN_MS 60000UL
-static unsigned long smCooldownMs = WIFI_COOLDOWN_MIN_MS;
-
 static bool          smScanPending     = false; // a scan currently owns the shared radio
 
 // Manual scan requested by the web UI's "Scan for networks" button. Runs
@@ -294,7 +286,7 @@ static void handleAddNetwork(const char* ssid, const char* password) {
             Log(INFO, "[WiFi] Updated password for: " + String(ssid));
             // Correcting a password (e.g. after a scan-and-join typo) must
             // retry promptly too — without this, a wrong first attempt burns
-            // through WIFI_MAX_ATTEMPTS_PER_NET and lands in the 15-minute
+            // through WIFI_MAX_ATTEMPTS_PER_NET and lands in the WIFI_COOLDOWN_MS
             // cooldown, and the corrected password then sits ignored for the
             // rest of that window because only the "brand new network" branch
             // below used to reset the state machine. Found 2026-08-07.
@@ -505,7 +497,6 @@ static void wifiTask(void* /*param*/) {
             smTryIdx          = 0;
             smTryAttempts     = 0;
             smInCooldown      = false;
-            smCooldownMs      = WIFI_COOLDOWN_MIN_MS;  // back to the fast retry floor
             xSemaphoreTake(wifiMutex, portMAX_DELAY);
             wifiSSID = WiFi.SSID();
             wifiRSSI = WiFi.RSSI();
@@ -590,12 +581,12 @@ static void wifiTask(void* /*param*/) {
                     }
                     if (smTryIdx >= networkCount) {
                         smInCooldown      = true;
-                        smCooldownUntilMs = millis() + smCooldownMs;
+                        smCooldownUntilMs = millis() + WIFI_COOLDOWN_MS;
                         smTryIdx          = 0;
                         smTryAttempts     = 0;
-                        Log(WARN, "[WiFi] All " + String(networkCount) + " SSID(s) failed. Cooling down "
-                                  + String(smCooldownMs / 1000UL) + " s.");
-                        smCooldownMs = min(smCooldownMs * 2UL, WIFI_COOLDOWN_MS);
+                        Log(WARN, "[WiFi] All " + String(networkCount) + " SSID(s) failed (" +
+                                  String(WIFI_MAX_ATTEMPTS_PER_NET) + " attempts each). Cooling down " +
+                                  String(WIFI_COOLDOWN_MS / 60000UL) + " min.");
                     } else {
                         smTryAttempts++;
                         Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
