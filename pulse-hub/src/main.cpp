@@ -23,6 +23,9 @@
 #include "ADE7758.h"
 #include "MotorProtection.h"
 #include "MotorDrive.h"
+#include "Zones.h"
+#include "Programs.h"
+#include "I2CScan.h"
 
 // =============================================================================
 //                              GLOBAL STATE DEFINITIONS
@@ -84,6 +87,11 @@ void setup() {
 
     Log(INFO, "=== AgriPulse Controller v" FW_VERSION " ===");
 
+    // Run before initRTC()/initDisplay()/initHistory(), all of which probe I2C
+    // and would otherwise each report their own chip "missing" without ever
+    // establishing whether the bus is alive at all.
+    i2cDiagnoseBothPinouts();
+
     initRTC();
     initBuzzer();
     initDisplay();
@@ -99,6 +107,12 @@ void setup() {
     adeInit();
     protInit();
     motorDriveInit();
+
+    // Zones after the drive: zonesInit() probes the I2C valve board and must
+    // not claim the LCD's address, so it runs after initDisplay() has decided
+    // which address (if any) the display owns.
+    zonesInit();
+    programsInit();
 
     // LoRa for OH tank remote node
     initLoRa();
@@ -140,15 +154,45 @@ void setup() {
 //                              LOOP
 // =============================================================================
 
+// Diagnostic instrumentation: loop() shares one core with the HTTP server, so
+// any stage that blocks stalls every pending web request along with it. That
+// is exactly the still-unexplained 3-6 s /api/power delay noted in the
+// investigation that fixed the digest-auth/overlapping-poll/LCD-stall bugs —
+// pollLoRa(), the ADE7758 SPI poll and AP+STA coexistence were the leading
+// suspects but none was pinned down. Rather than guess further, log which
+// stage(s) actually blew the budget whenever a whole iteration is slow, so
+// the next occurrence is caught with evidence instead of another probe
+// session. Overhead in the normal (fast) case is ~13 extra millis() calls.
+#define LOOP_STAGE_WARN_MS   20UL   // a single stage taking this long is suspicious
+#define LOOP_TOTAL_WARN_MS   50UL   // whole-iteration time worth logging
+
+struct LoopStageTiming {
+    const char*   name;
+    unsigned long ms;
+};
+
 void loop() {
+    unsigned long loopStart = millis();
+    LoopStageTiming stages[16];
+    uint8_t nStages = 0;
+    unsigned long mark = loopStart;
+    auto stage = [&](const char* name) {
+        unsigned long now = millis();
+        stages[nStages++] = { name, now - mark };
+        mark = now;
+    };
+
     // --- Non-blocking WiFi/OTA maintenance ---
     checkWiFiConnection();
+    stage("wifi");
 
     // --- RTC periodic sync ---
     checkAndSyncRTC();
+    stage("rtc");
 
     // --- LoRa: receive OH tank float state ---
     pollLoRa();
+    stage("lora");
 
     // --- UG tank: poll float switch ---
     static unsigned long lastUGRead = 0;
@@ -156,39 +200,47 @@ void loop() {
         lastUGRead = millis();
         readUGFloatSwitch();
     }
+    stage("ug_float");
 
     // --- Touch switch polling ---
     pollTouchSwitches();
+    stage("touch");
 
     // --- 3-phase metering ---
     adePoll();
+    stage("ade");
 
-    // --- Motor auto-control ---
-    // The latching-starter drive owns the relays when enabled, so the legacy
-    // OH/UG level logic must not also drive them.
-    if (motorDriveEnabled()) {
-        motorDriveTask();
-    } else {
-        autoControlOHMotor();
-        autoControlUGMotor();
-        processPendingMotorStarts();
-    }
-    motorHeartbeat();
+    // --- Motor control ---
+    // Legacy two-motor (OH/UG) relay logic retired 2026-08-07: real hardware
+    // is one starter + changeover, not two independent motors. MotorDrive
+    // exclusively owns OH_RELAY_PIN/UG_RELAY_PIN now.
+    motorDriveTask();
+    stage("motor");
+
+    // --- Irrigation zones: run timers, valve/pump interlocks ---
+    zonesTask();
+    programsTask();
+    stage("zones");
 
     // --- Buzzer pattern update ---
     updateBuzzer();
+    stage("buzzer");
 
     // --- LCD display rotation ---
     updateDisplay();
+    stage("display");
 
     // --- Scheduler ---
     checkSchedules();
+    stage("sched");
 
     // --- MQTT ---
     mqttLoop();
+    stage("mqtt");
 
     // --- Web server ---
     handleWebClients();
+    stage("web");
 
     // --- NTP resync hourly ---
     static unsigned long lastNtp = 0;
@@ -196,5 +248,21 @@ void loop() {
         (millis() - lastNtp >= NTP_SYNC_INTERVAL_MS || lastNtp == 0)) {
         lastNtp = millis();
         synchronizeTime();
+    }
+    stage("ntp");
+
+    unsigned long total = millis() - loopStart;
+    if (total >= LOOP_TOTAL_WARN_MS) {
+        String detail;
+        for (uint8_t i = 0; i < nStages; i++) {
+            if (stages[i].ms >= LOOP_STAGE_WARN_MS) {
+                if (detail.length()) detail += ", ";
+                detail += String(stages[i].name) + "=" + String(stages[i].ms) + "ms";
+            }
+        }
+        if (detail.length() == 0) {
+            detail = "no single stage over " + String(LOOP_STAGE_WARN_MS) + "ms - time spread thin across many";
+        }
+        Log(WARN, "[Loop] Slow iteration: " + String(total) + "ms (" + detail + ")");
     }
 }

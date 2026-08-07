@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"/c/Users/haina/OneDrive/Desktop/AgriPulse/pulse-hub\" -iname \"*.pio*\" -maxdepth 2 2>&1; find / -ipath \"*espressif32*WiFiClient.cpp\" 2>/dev/null | head -5; find / -iname \"PubSubClient.cpp\" 2>/dev/null | head -5)",
+      "Bash(python -m pip --version)",
+      "Bash(python -m pip install --user -U platformio)",
+      "Bash(find 'C:\\\\Users\\\\haina/.platformio' -iname nebulas3*.json)",
+      "Bash(python -m esptool --port COM3 flash_id)",
+      "Bash(find 'C:\\\\Users\\\\haina/.platformio' -iname esptool* -maxdepth 4)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"import serial; print\\(serial.__version__\\)\")"
+    ]
+  }
+}

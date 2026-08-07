@@ -6,9 +6,17 @@
 // the hub often serves this over its own hotspot with no internet.
 
 static const char PAGE_CSS[] PROGMEM = R"CSS(
+/* Three themes. Green is the default and stays exactly as approved.
+   Black is a true black ground for night use at the panel and for OLED
+   screens; it keeps the same green accent so the product still reads as one
+   thing. Light is the daylight/outdoor option. */
 :root{
  --bg:#0e1512;--card:#161f1b;--card2:#1d2823;--bd:#28352e;--bd2:#3a4c43;
  --tx:#e6efe9;--tx2:#8ea297;--ok:#3fb950;--warn:#d29922;--err:#f85149;--acc:#2ea043;
+}
+[data-t=black]{
+ --bg:#000;--card:#0a0a0a;--card2:#141414;--bd:#242424;--bd2:#3a3a3a;
+ --tx:#f2f2f2;--tx2:#909090;--ok:#3fb950;--warn:#d29922;--err:#ff5f56;--acc:#2ea043;
 }
 [data-t=light]{
  --bg:#f3f6f4;--card:#fff;--card2:#eef2ef;--bd:#dbe3dd;--bd2:#c3cfc8;
@@ -65,7 +73,9 @@ ul.chk li:first-child{border-top:none}
 .z{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center}
 .z.on{border-color:var(--acc);background:rgba(46,160,67,.13)}
 .z .zn{font-size:12.5px;font-weight:600;margin-bottom:4px}
-.z .zs{font-size:10.5px;color:var(--tx2)}
+.z .zs{font-size:10.5px;color:var(--tx2);font-variant-numeric:tabular-nums}
+.z .zbtn{margin-top:7px;width:100%;padding:5px 0}
+.z .zbtn:disabled{opacity:.38;cursor:not-allowed}
 .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--bd);flex-wrap:wrap}
 .row:first-child{border-top:none}
 .lb{flex:1;min-width:128px;font-size:12.5px}
@@ -83,6 +93,12 @@ select.inp{width:auto}
  font-size:13px;font-weight:600;display:none;z-index:60;color:#fff}
 pre.log{background:var(--card2);border:1px solid var(--bd);border-radius:7px;padding:9px;font-size:11px;
  max-height:300px;overflow:auto;margin:0;white-space:pre-wrap}
+.hist{max-height:440px;overflow:auto}
+.hist table{width:100%;border-collapse:collapse;font-size:12.5px}
+.hist th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);
+ text-align:left;padding:4px 6px;font-weight:600;position:sticky;top:0;background:var(--card)}
+.hist td{padding:5px 6px;border-top:1px solid var(--bd);text-align:left;white-space:nowrap}
+.hist td:nth-child(2){white-space:normal}
 )CSS";
 
 #endif // PAGE_CSS_H

@@ -1,0 +1,10 @@
+E (225) opi psram: PSRAM ID read error: 0x00000000, PSRAM chip not found or not supported, or wrong PSRAM line mode
+E (225) spiram: SPI RAM enabled but initialization failed. Bailing out.
+E (245) esp_core_dump_flash: No core dump partition found!
+E (246) esp_core_dump_flash: No core dump partition found!
+[  3340][I][esp32-hal-i2c.c:75] i2cInit(): Initialising I2C Master: sda=18 scl=17 freq=100000
+[01:01:23][INFO] === AgriPulse Controller v2.11.0 ===
+[01:01:23][INFO] [I2C] Idle levels: SDA18=HIGH  SCL17=HIGH
+[  3372][I][esp32-hal-i2c.c:75] i2cInit(): Initialising I2C Master: sda=18 scl=17 freq=100000
+[01:01:23][INFO] [I2C] SDA18/SCL17: no devices  (compiled-in pins, board v1.x)
+[  3437][I][esp32-hal-i2c.c:75] i2cInit(): Initialising I2C Master: sda=8 scl=9 freq=100000

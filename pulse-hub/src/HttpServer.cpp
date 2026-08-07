@@ -2,7 +2,8 @@
 #include "Logger.h"
 #include "Config.h"
 #include "Globals.h"
-#include "MotorControl.h"
+#include "MotorDrive.h"
+#include "MotorControl.h"   // status accessors (buzzer countdown, reject codes, saveMotorConfig)
 #include "Buzzer.h"
 #include "LoRaManager.h"
 #include "WiFiManager.h"
@@ -12,6 +13,7 @@
 #include "MQTTManager.h"
 #include "RTCManager.h"
 #include "ApiCommon.h"
+#include "I2CScan.h"
 #include "web/PageHtml.h"
 #include "web/PageCss.h"
 #include "web/PageJs.h"
@@ -130,8 +132,27 @@ static void handleJs() {
 //  GET /status  – JSON status for BLE app and AJAX
 // ---------------------------------------------------------------------------
 
+// Why the device last restarted. Distinguishing a brownout (undersized supply
+// or a contactor inrush dragging the rail down) from a panic or a clean OTA
+// reboot is the first question worth asking when a controller in the field
+// restarts unexpectedly, so surface it rather than leaving it to the logs.
+static const char* resetReasonStr() {
+    switch (esp_reset_reason()) {
+        case ESP_RST_POWERON:  return "power-on";
+        case ESP_RST_SW:       return "software / OTA";
+        case ESP_RST_PANIC:    return "panic / exception";
+        case ESP_RST_INT_WDT:  return "interrupt watchdog";
+        case ESP_RST_TASK_WDT: return "task watchdog";
+        case ESP_RST_WDT:      return "other watchdog";
+        case ESP_RST_BROWNOUT: return "brownout (supply dipped)";
+        case ESP_RST_DEEPSLEEP:return "deep-sleep wake";
+        case ESP_RST_EXT:      return "external reset";
+        default:               return "unknown";
+    }
+}
+
 static void handleStatus() {
-    StaticJsonDocument<1024> doc;
+    StaticJsonDocument<1280> doc;
     doc["ugState"]           = tankStateStr(ugTankState);
     doc["ohState"]           = tankStateStr(ohTankState);
     doc["ohLastKnown"]       = tankStateStr(ohLastKnownState);
@@ -166,6 +187,14 @@ static void handleStatus() {
     doc["wifiConnected"]     = (WiFi.status() == WL_CONNECTED);
     doc["wifiSSID"]          = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "";
     doc["wifiIP"]            = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "";
+    // AP is started once in wifiTask() and never torn down (see WiFiManager.cpp),
+    // so apEnabled is normally true regardless of STA state — isAPMode really
+    // means "STA not yet connected", not "AP radio off". Report both modes
+    // explicitly rather than let the UI infer radio state from that flag.
+    doc["apEnabled"]         = (WiFi.getMode() & WIFI_AP) != 0;
+    doc["staEnabled"]        = (WiFi.getMode() & WIFI_STA) != 0;
+    doc["apIP"]              = WiFi.softAPIP().toString();
+    doc["webUser"]           = webUser;
     doc["time"]              = getFormattedTime();
     doc["fwVersion"]         = FW_VERSION;
     doc["bleEnabled"]        = false;
@@ -182,6 +211,7 @@ static void handleStatus() {
     doc["ohRej"]             = (int)getOHRejectCode();
     doc["ugRej"]             = (int)getUGRejectCode();
     doc["txFw"]              = TRANSMITTER_FW_VERSION;
+    doc["uptime"]            = (uint32_t)(millis() / 1000UL);
     doc["ntpSynced"]         = hasNtpSynced();
     doc["ntpDriftSec"]       = getNtpDriftSeconds();
     doc["ntpSyncAge"]        = (uint32_t)getNtpSyncAgeSeconds();
@@ -202,27 +232,50 @@ static void handleStatus() {
     doc["sketchSize"]        = (uint32_t)ESP.getSketchSize();
     doc["freeSketch"]        = (uint32_t)ESP.getFreeSketchSpace();
     doc["flashSize"]         = (uint32_t)ESP.getFlashChipSize();
+    // Always 0 — PSRAM is deliberately disabled (board_build.psram=disabled in
+    // platformio.ini) so GPIO35 can be reused as CHANGEOVER_RELAY_PIN instead
+    // of its PSRAM-bus role. Reported honestly rather than omitted, so the UI
+    // can say "disabled" instead of just not mentioning it.
+    doc["psramSize"]         = (uint32_t)ESP.getPsramSize();
+    doc["cpuCores"]          = (uint32_t)ESP.getChipCores();
+    doc["cpuFreqMHz"]        = (uint32_t)ESP.getCpuFreqMHz();
+    doc["chipModel"]         = ESP.getChipModel();
+    doc["chipRev"]           = (uint32_t)ESP.getChipRevision();
+    doc["flashSpeedHz"]      = (uint32_t)ESP.getFlashChipSpeed();
+    doc["sdkVersion"]        = ESP.getSdkVersion();
+    doc["macAddress"]        = WiFi.macAddress();
+    doc["resetReason"]       = resetReasonStr();
+    doc["i2cSda"]            = SDA_PIN;
+    doc["i2cScl"]            = SCL_PIN;
+    doc["boardRev"]          =
+    #ifdef BOARD_V2
+        "v2.0";
+    #else
+        "v1.x";
+    #endif
     String out;
     serializeJson(doc, out);
     sendJson(200, out);
 }
 
 // ---------------------------------------------------------------------------
-//  Motor endpoints
+//  Motor endpoints — legacy /motor and /undergroundmotor, retired 2026-08-07.
+//  Kept as thin redirects to the drive (well/bore) for any old client still
+//  calling them; /api/motor/cmd is the real interface now.
 // ---------------------------------------------------------------------------
 
 static void handleOHMotor() {
     String state = server.arg("state");
-    if (state == "on")  turnOnOHMotor();
-    else if (state == "off") turnOffOHMotor();
+    if (state == "on")       motorDriveRequestStart(MOTOR_WELL, REASON_MANUAL_WEB);
+    else if (state == "off") motorDriveRequestStop(REASON_MANUAL_WEB);
     else { sendError("Invalid state param"); return; }
     sendOk();
 }
 
 static void handleUGMotor() {
     String state = server.arg("state");
-    if (state == "on")  turnOnUGMotor();
-    else if (state == "off") turnOffUGMotor();
+    if (state == "on")       motorDriveRequestStart(MOTOR_BORE, REASON_MANUAL_WEB);
+    else if (state == "off") motorDriveRequestStop(REASON_MANUAL_WEB);
     else { sendError("Invalid state param"); return; }
     sendOk();
 }
@@ -438,9 +491,8 @@ static void handleUpdateAllSchedules() {
         if (!enabled) schedules[i].isRunning = false;
     }
     saveSchedules();
-    // Cancel motors whose running schedule was deleted/disabled
-    if (ohWasRunning) turnOffOHMotor();
-    if (ugWasRunning) turnOffUGMotor();
+    // Cancel the motor if its running schedule was deleted/disabled
+    if (ohWasRunning || ugWasRunning) motorDriveRequestStop(REASON_SCHEDULED);
     sendOk();
 }
 
@@ -457,15 +509,9 @@ static void handleCancelSchedule() {
         schedules[i].isRunning = false;
         schedules[i].startTime = 0;
     }
-    // Always stop both to also cancel a pending buzzer-delay start
-    if (ohRunning || ugRunning) {
-        if (ohRunning) turnOffOHMotor();
-        if (ugRunning) turnOffUGMotor();
-    } else {
-        // Cancel buzzer even if isRunning wasn't set yet (fired < 10s ago)
-        turnOffOHMotor();
-        turnOffUGMotor();
-    }
+    // Also covers a pending buzzer-delay start that fired < 10s ago
+    motorDriveRequestStop(REASON_SCHEDULED);
+    (void)ohRunning; (void)ugRunning;
     Log(INFO, "[Sched] Active schedule cancelled via web");
     sendOk();
 }
@@ -626,6 +672,14 @@ static void handleSetMqttBroker() {
 }
 
 // ---------------------------------------------------------------------------
+//  GET /api/i2cscan  — on-demand bus scan for the System page
+// ---------------------------------------------------------------------------
+
+static void handleI2CScan() {
+    server.send(200, "application/json", i2cScanJson());
+}
+
+// ---------------------------------------------------------------------------
 //  Setup & loop
 // ---------------------------------------------------------------------------
 
@@ -642,9 +696,10 @@ void setupWebServer() {
     guarded("/",                   HTTP_GET,  handleRoot);
     guarded("/app.css",            HTTP_GET,  handleCss);
     guarded("/app.js",             HTTP_GET,  handleJs);
+    guarded("/api/i2cscan",        HTTP_GET,  handleI2CScan);
     guarded("/status",             HTTP_GET,  handleStatus);
-    guarded("/motor",              HTTP_GET,  handleOHMotor);
-    guarded("/undergroundmotor",   HTTP_GET,  handleUGMotor);
+    guarded("/motor",              HTTP_GET,  handleOHMotor);          // legacy: -> Well
+    guarded("/undergroundmotor",   HTTP_GET,  handleUGMotor);          // legacy: -> Bore
     guarded("/wifiscan",           HTTP_GET,  handleWifiScan);
     guarded("/wifilist",           HTTP_GET,  handleWifiList);
     guarded("/addwifi",            HTTP_POST, handleAddWifi);
@@ -676,6 +731,7 @@ void setupWebServer() {
     registerDriveApi(guarded);
     registerProtectionApi(guarded);
     registerZoneApi(guarded);
+    registerProgramApi(guarded);
     guarded("/logs",               HTTP_GET,  [](){
         sendJson(200, getLogsJson(50));
     });

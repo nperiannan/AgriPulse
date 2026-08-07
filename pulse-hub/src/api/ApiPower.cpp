@@ -17,7 +17,10 @@ static void getPower() {
     doc["age_s"]      = r.lastUpdateMs ? (millis() - r.lastUpdateMs) / 1000UL : 0;
 
     JsonArray ph = doc.createNestedArray("phases");
-    const char* names[] = { "A", "B", "C" };
+    // R/Y/B (Red/Yellow/Blue) is the standard Indian 3-phase colour convention
+    // this install uses, not the meter's internal A/B/C register naming —
+    // ADE_PHASE_A/B/C (ADE7758.h) still refer to the same physical channels.
+    const char* names[] = { "R", "Y", "B" };
     for (uint8_t i = 0; i < ADE_PHASE_COUNT; i++) {
         JsonObject p = ph.createNestedObject();
         p["name"]    = names[i];

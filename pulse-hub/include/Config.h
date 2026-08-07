@@ -4,7 +4,7 @@
 // =============================================================================
 //                              FIRMWARE VERSION
 // =============================================================================
-#define FW_VERSION "2.10.0"
+#define FW_VERSION "2.12.0"
 
 // Known transmitter firmware version (update here when transmitter is reflashed).
 #define TRANSMITTER_FW_VERSION "2.0.0"
@@ -75,8 +75,11 @@
 #define UG_RELAY_PIN  2    // RLY2 – Underground tank motor
 
 // RLY3 – changeover contactor (selects which motor the single starter feeds).
-// GPIO35 is an octal-PSRAM pin on the N16R8 module; it is only usable because
+// GPIO35 is a PSRAM-octal-bus pin; it is only usable as a plain GPIO because
 // platformio.ini sets `board_build.psram = disabled`.  Never enable PSRAM.
+// (Flash is verified at 8MB via `esptool flash_id` — see partitions/ota_dual_app.csv —
+// so despite the pin being from the PSRAM bus, this is not necessarily an N16R8 module;
+// PSRAM presence/size on this board has not been independently confirmed either way.)
 #define CHANGEOVER_RELAY_PIN  35
 
 // Relay logic: HIGH = motor ON

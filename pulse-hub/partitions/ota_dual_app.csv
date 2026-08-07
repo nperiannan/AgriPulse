@@ -1,7 +1,19 @@
-# Custom partition table with dual OTA app slots for Nebula S3 (4MB flash)
+# Custom partition table with dual OTA app slots for Nebula S3.
+#
+# The vendor's PlatformIO board file (and this table, before 2026-08) claimed
+# 4MB flash. Queried directly off the actual chip with `esptool flash_id`:
+# manufacturer c8 (GigaDevice), device 4017 -> 8MB. Sized for that, verified
+# hardware capacity - not the 4MB the board file assumed, nor the 16MB an
+# "N16R8 module" label elsewhere in this codebase would imply for a different
+# part. Two OTA app slots are kept (not merged into one) so a failed update
+# still rolls back automatically via esp_ota_mark_app_valid_cancel_rollback()
+# in main.cpp - collapsing to a single slot would remove that safety net.
+# nvs/otadata offsets are unchanged from the 4MB table so existing NVS data
+# (WiFi creds, calibration, etc.) survives this repartition without migration.
+#
 # Name,   Type, SubType, Offset,   Size,     Flags
 nvs,      data, nvs,     0x9000,   0x5000
 otadata,  data, ota,     0xE000,   0x2000
-app0,     app,  ota_0,   0x10000,  0x1C0000
-app1,     app,  ota_1,   0x1D0000, 0x1C0000
-spiffs,   data, spiffs,  0x390000, 0x70000
+app0,     app,  ota_0,   0x10000,  0x300000
+app1,     app,  ota_1,   0x310000, 0x300000
+spiffs,   data, spiffs,  0x610000, 0x1F0000

@@ -15,6 +15,13 @@ typedef enum : uint8_t {
     HIST_OH_STATE_CHG = 4,   // OH tank state changed (LoRa update)
     HIST_UG_STATE_CHG = 5,   // UG tank state changed (float switch)
     HIST_BOOT         = 6,
+    // Added 2026-08-07 for irrigation zones. The 8-byte record has no spare
+    // field, so for these two event types ONLY, HistoryRecord.ohState is
+    // repurposed to carry the zone id (0-7) instead of a TankState — every
+    // record already in EEPROM predates these event codes, so old records are
+    // unaffected and need no migration.
+    HIST_ZONE_OPEN    = 7,   // ohState field holds the zone id
+    HIST_ZONE_CLOSE   = 8,   // ohState field holds the zone id
 } HistEvent;
 
 // Reason a motor/boot event happened.  Packed into the HIGH nibble (bits 4-7)
@@ -67,6 +74,10 @@ void    initHistory();
 //              synthetic power-cut OFF to when power was actually lost.
 void    addHistoryRecord(HistEvent evt, TankState oh, TankState ug,
                          uint8_t reason = REASON_NONE, uint32_t tsOverride = 0);
+
+// Convenience wrapper for HIST_ZONE_OPEN / HIST_ZONE_CLOSE — packs zoneId into
+// the repurposed field so call sites in Zones.cpp never touch that detail.
+void    addZoneHistoryRecord(HistEvent evt, uint8_t zoneId, uint8_t reason = REASON_NONE);
 
 // Detected EEPROM I2C address (valid after initHistory when histEepromFound).
 uint8_t getEepromAddress();

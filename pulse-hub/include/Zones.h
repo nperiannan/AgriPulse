@@ -1,0 +1,139 @@
+#ifndef ZONES_H
+#define ZONES_H
+
+#include <Arduino.h>
+#include "ValveController.h"
+#include "History.h"      // HistReason (REASON_MANUAL_WEB etc.) for zoneStop()'s default arg
+#include "MotorDrive.h"   // MotorId (MOTOR_WELL/MOTOR_BORE)
+
+// Irrigation zones, and the safety rules that govern them.
+//
+// This is the layer that decides what is *allowed*; ValveController only knows
+// how to flip bits.
+//
+// THE CONTROL CHAIN, in the order the real plant requires:
+//
+//   1. A zone is requested.
+//   2. The supply is checked FIRST — voltage and all three phases. The motor is
+//      the water source, so a valve with no motor behind it is pointless, and a
+//      motor started on a bad supply is destroyed.
+//   3. Only if every condition passes does the valve open AND the motor start.
+//      The valve leads, so the pump never starts into a closed system.
+//   4. From the moment it is running, current is watched continuously:
+//         current DROPS  -> dry run: no water, lost prime
+//         current RISES  -> blocked valve or restriction, load climbing
+//      Either one stops the motor immediately, to protect both it and the valve.
+//
+// Other rules enforced here because breaking them damages hardware:
+//   * At most ZONE_MAX_CONCURRENT valves open at once — more than the pump can
+//     feed drops head across all of them and runs the pump off its curve.
+//   * Never run the pump with everything shut (deadheading): it churns the same
+//     water, heats it, and wrecks the seals. Valves close only AFTER the pump
+//     has stopped.
+//   * A protection trip, drive fault or welded contactor closes everything.
+//
+// Only one motor may run at a time (the electricity board supplies agriculture
+// free on that condition), which is what the changeover contactor enforces.
+// The WELL motor is the default — it has more pressure. There is no separate
+// master valve: the motor itself is the source.
+
+#define ZONE_COUNT           8
+#define ZONE_MAX_CONCURRENT  3     // 5 HP head limit
+#define ZONE_NAME_MAX       17     // 16 chars + NUL, matches the LCD width
+#define ZONE_MAX_MINUTES   240
+
+// Not every valve waters a field. The borewell has a diverter downstream of it
+// that either feeds the zone valves or sends water into the well to be stored
+// for later. It is a legitimate destination for the pump's output, so it
+// satisfies the never-deadhead rule on its own.
+enum ZoneKind : uint8_t {
+    ZONE_KIND_IRRIGATION = 0,
+    ZONE_KIND_DIVERTER   = 1,   // borewell -> well, for storage
+};
+
+enum ZoneSource : uint8_t {
+    ZONE_SRC_NONE = 0,
+    ZONE_SRC_MANUAL,     // operator pressed run in the UI
+    ZONE_SRC_PROGRAM,    // irrigation program
+};
+
+// Why a run request was refused. The UI shows this instead of failing silently —
+// a valve that quietly does nothing is worse than one that says why.
+enum ZoneReject : uint8_t {
+    ZONE_REJ_NONE = 0,
+    ZONE_REJ_BAD_ID,
+    ZONE_REJ_TOO_MANY_OPEN,     // would exceed ZONE_MAX_CONCURRENT
+    ZONE_REJ_VALVE_FAULT,       // I2C write failed
+    ZONE_REJ_LOCKED_OUT,        // maintenance lockout engaged
+    ZONE_REJ_SUPPLY,            // voltage or frequency outside limits
+    ZONE_REJ_PHASE,             // a phase is missing, or rotation is reversed
+    ZONE_REJ_METER,             // meter unhealthy/uncalibrated: start unverifiable
+    ZONE_REJ_MOTOR_FAULT,       // drive in fault or welded, needs clearing first
+    ZONE_REJ_BAD_DURATION,
+};
+
+// Why watering last stopped on its own. Worth distinguishing: a dry run and a
+// blocked valve are indistinguishable from the valve's side but call for
+// opposite responses from whoever walks out to the field.
+enum ZoneStopCause : uint8_t {
+    ZONE_STOP_NONE = 0,
+    ZONE_STOP_COMPLETED,        // ran its allotted time
+    ZONE_STOP_OPERATOR,
+    ZONE_STOP_DRY_RUN,          // current fell: no water, lost prime
+    ZONE_STOP_BLOCKED,          // current rose: blocked valve or restriction
+    ZONE_STOP_SUPPLY,           // supply went out of limits while running
+    ZONE_STOP_MOTOR_FAULT,      // drive fault or welded contactor
+};
+
+struct ZoneState {
+    char       name[ZONE_NAME_MAX];
+    ZoneKind   kind;
+    bool       open;
+    ZoneSource source;
+    uint16_t   totalSec;      // requested run length
+    uint32_t   endsAtMs;      // millis() deadline while open
+};
+
+void zonesInit();
+
+// Drive timers, pump coordination and interlocks. Call every loop().
+void zonesTask();
+
+// Open zone `id` for `minutes`. Returns ZONE_REJ_NONE on success.
+ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src);
+
+// Close one zone, or all of them. Both defer to the pump: if closing this
+// valve would leave the motor running with nothing open, the motor is stopped
+// FIRST and the valve stays open until current confirms it, then the wind-down
+// in zonesTask() closes it. Never closes into a still-turning pump.
+// histReason is the HistReason code recorded against the HIST_ZONE_CLOSE entry
+// (default REASON_MANUAL_WEB — the API's "stop" command is the common caller).
+void zoneStop(uint8_t id, uint8_t histReason = REASON_MANUAL_WEB);
+void zonesStopAll(ZoneStopCause cause);
+
+const ZoneState& zoneGet(uint8_t id);
+uint8_t          zoneOpenCount();
+uint16_t         zoneSecondsLeft(uint8_t id);
+
+bool zoneSetName(uint8_t id, const String& name);
+void zonesSaveNames();
+
+const char* zoneRejectName(ZoneReject r);
+const char* zoneStopCauseName(ZoneStopCause c);
+
+// Why watering last stopped by itself, and which zone was open at the time.
+// Latched so the UI can explain an unattended stop that happened hours ago.
+ZoneStopCause zoneLastStopCause();
+const char*   zoneLastStopZoneName();
+
+// True when the pump should be running for irrigation right now — i.e. at
+// least one zone is open. Used by the drive coordination in zonesTask().
+bool zonesWantPump();
+
+// Which motor the pump-coordination block in zonesTask() requests when a zone
+// needs water. Set by Programs.cpp before opening a zone (default MOTOR_WELL —
+// more pressure). A manual zone run from the UI always uses the last value set.
+void    zonesSetPreferredSource(MotorId m);
+MotorId zonesPreferredSource();
+
+#endif // ZONES_H

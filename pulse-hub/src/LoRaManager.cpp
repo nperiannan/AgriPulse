@@ -27,6 +27,20 @@ static void IRAM_ATTR onLoraPacket() {
     packetReceived = true;
 }
 
+// Non-blocking debug-LED flash: 0 = idle, otherwise the millis() deadline at
+// which the LED should turn back off. A blocking delayMicroseconds(50000)
+// here used to stall the loop — and the web server with it — for 50 ms on
+// every received packet, which defeated the whole point of the interrupt-
+// driven, non-blocking receive path above.
+static unsigned long ledOffAtMs = 0;
+
+static void serviceDebugLed() {
+    if (ledOffAtMs != 0 && (long)(millis() - ledOffAtMs) >= 0) {
+        digitalWrite(DEBUG_LED, LOW);
+        ledOffAtMs = 0;
+    }
+}
+
 // ---------------------------------------------------------------------------
 //  Public API
 // ---------------------------------------------------------------------------
@@ -60,6 +74,8 @@ bool initLoRa() {
 }
 
 void pollLoRa() {
+    serviceDebugLed();   // turn off a pending flash even if we return early below
+
     // --- Re-init logic if radio failed ---
     if (!loraReady) {
         if (retryCount >= MAX_LORA_RETRIES) {
@@ -119,10 +135,11 @@ void pollLoRa() {
         lastRSSI         = radio.getRSSI();
         lastSNR          = radio.getSNR();
 
-        // Flash debug LED
+        // Flash debug LED — non-blocking; serviceDebugLed() turns it back off
+        // on a later pollLoRa() call once 50 ms have passed.
         digitalWrite(DEBUG_LED, HIGH);
-        delayMicroseconds(50000); // 50 ms
-        digitalWrite(DEBUG_LED, LOW);
+        ledOffAtMs = millis() + 50;
+        if (ledOffAtMs == 0) ledOffAtMs = 1;   // dodge the 0-means-idle sentinel
 
         uint8_t pktType = buf[0];
         TankState newState = TANK_STATE_UNKNOWN;

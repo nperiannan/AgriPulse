@@ -1,49 +1,52 @@
 #include "ApiCommon.h"
 #include "Config.h"
+#include "Zones.h"
+#include "ValveController.h"
+#include "MotorDrive.h"
+#include "Logger.h"
 
 #include <ArduinoJson.h>
 
-// GET /api/zones — zone inventory.
+// GET  /api/zones       — live zone state, valve backend, interlock limits
+// POST /api/zones/cmd   — run / stop / stopall / rename / rescan
 //
-// The valve hardware (8-channel I2C relay board) is not built yet, so this
-// reports the intended layout and an explicit `hardware_present:false` rather
-// than pretending zones are controllable. The UI uses that flag to disable the
-// controls instead of silently doing nothing when they are pressed.
-
-struct ZoneDef {
-    const char* name;
-    const char* kind;   // valve | motor | aux
-};
-
-// Placeholder inventory until zones become user-configurable and stored on the
-// unused SPIFFS partition.
-static const ZoneDef zones[] = {
-    { "Zone 1",      "valve" },
-    { "Zone 2",      "valve" },
-    { "Zone 3",      "valve" },
-    { "Zone 4",      "valve" },
-    { "Zone 5",      "valve" },
-    { "Zone 6",      "valve" },
-    { "Zone 7",      "valve" },
-    { "Well Return", "valve" },
-};
-static const uint8_t ZONE_COUNT = sizeof(zones) / sizeof(zones[0]);
+// Previously this file returned a hardcoded list with hardware_present:false
+// and a command handler that always errored. It now drives real valves through
+// ValveController, or a simulated backend when no board is fitted — the UI and
+// the interlocks behave identically either way, so the irrigation layer is
+// usable and testable before the board exists.
 
 static void getZones() {
-    StaticJsonDocument<1024> doc;
-    doc["hardware_present"] = false;
-    doc["max_open"]         = 3;   // 5 HP head limit
-    doc["min_open_running"] = 1;   // never deadhead a running pump
-    doc["note"]             = "8-channel I2C valve board not connected";
+    StaticJsonDocument<1536> doc;
+    doc["hardware_present"] = valveHardwarePresent();
+    doc["backend"]          = valveBackendName();
+    doc["addr"]             = valveI2CAddress();
+    doc["bus_fault"]        = valveBusFault();
+    doc["max_open"]         = ZONE_MAX_CONCURRENT;
+    doc["open_count"]       = zoneOpenCount();
+    doc["max_minutes"]      = ZONE_MAX_MINUTES;
+    doc["note"]             = valveHardwarePresent()
+                              ? "valve board online"
+                              : "no valve board - simulated, nothing is energised";
+    // Why watering last stopped on its own. The UI surfaces this prominently:
+    // a dry run and a blocked valve both leave every valve shut and the field
+    // dry, and only this distinguishes them.
+    doc["stop_cause"]       = (int)zoneLastStopCause();
+    doc["stop_reason"]      = zoneStopCauseName(zoneLastStopCause());
+    doc["stop_zone"]        = zoneLastStopZoneName();
 
     JsonArray arr = doc.createNestedArray("zones");
     for (uint8_t i = 0; i < ZONE_COUNT; i++) {
-        JsonObject z = arr.createNestedObject();
-        z["id"]    = i;
-        z["name"]  = zones[i].name;
-        z["kind"]  = zones[i].kind;
-        z["open"]  = false;
-        z["run_s"] = 0;
+        const ZoneState& z = zoneGet(i);
+        JsonObject o = arr.createNestedObject();
+        o["id"]        = i;
+        o["name"]      = z.name;
+        o["kind"]      = z.kind == ZONE_KIND_DIVERTER ? "diverter" : "irrigation";
+        o["open"]      = z.open;
+        o["left_s"]    = zoneSecondsLeft(i);
+        o["total_s"]   = z.totalSec;
+        o["source"]    = z.source == ZONE_SRC_PROGRAM ? "program"
+                       : z.source == ZONE_SRC_MANUAL  ? "manual" : "";
     }
     String out;
     serializeJson(doc, out);
@@ -51,7 +54,58 @@ static void getZones() {
 }
 
 static void postZoneCmd() {
-    apiSendError("valve board not connected");
+    String cmd = apiServer.arg("cmd");
+
+    if (cmd == "stopall") {
+        zonesStopAll(ZONE_STOP_OPERATOR);
+        apiSendOk();
+        return;
+    }
+    if (cmd == "rescan") {
+        // valveRescan() re-probes the I2C bus and calls valveAllClosed()
+        // directly — a real physical write that bypasses Zones.cpp entirely.
+        // It cannot be allowed to run while any zone is open or the motor may
+        // be turning: it would de-energise every valve on the board while
+        // zones[] and the motor stay completely unaware, leaving the pump
+        // commanded to run into a system with nothing open — an unbounded
+        // self-inflicted deadhead with no code path left to catch it.
+        // (Found in the 2026-08-07 safety review.)
+        if (zoneOpenCount() > 0 || (motorDriveEnabled() && motorDriveCurrentFlowing())) {
+            apiSendError("cannot rescan while a zone is open or the pump may be running - "
+                         "stop all first");
+            return;
+        }
+        valveRescan();
+        Log(INFO, "[Web] Valve board rescan requested");
+        apiSendOk();
+        return;
+    }
+
+    // Everything below addresses a specific zone.
+    if (!apiServer.hasArg("id")) { apiSendError("id required"); return; }
+    int id = apiServer.arg("id").toInt();
+    if (id < 0 || id >= ZONE_COUNT) { apiSendError("no such zone"); return; }
+
+    if (cmd == "run") {
+        int mins = apiServer.hasArg("minutes") ? apiServer.arg("minutes").toInt() : 0;
+        ZoneReject r = zoneStart((uint8_t)id, (uint16_t)mins, ZONE_SRC_MANUAL);
+        if (r != ZONE_REJ_NONE) { apiSendError(zoneRejectName(r)); return; }
+        apiSendOk();
+        return;
+    }
+    if (cmd == "stop") {
+        zoneStop((uint8_t)id);
+        apiSendOk();
+        return;
+    }
+    if (cmd == "rename") {
+        if (!zoneSetName((uint8_t)id, apiServer.arg("name"))) {
+            apiSendError("name required"); return;
+        }
+        apiSendOk();
+        return;
+    }
+    apiSendError("unknown command");
 }
 
 void registerZoneApi(RouteRegistrar on) {

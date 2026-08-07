@@ -110,10 +110,13 @@ void motorDriveInit() {
 
     loadSettings();
 
+    // Legacy relay path retired 2026-08-07 - the drive is now the only motor
+    // control path, so it must be on. One-time migration for units whose NVS
+    // still holds the old "off by default" value.
     if (!enabled) {
-        enter(MDRV_DISABLED);
-        Log(INFO, "[Drive] Latching-starter drive disabled - legacy relay logic in control");
-        return;
+        enabled = true;
+        saveBool(NVS_KEY_DRIVE_ENABLED, true);
+        Log(WARN, "[Drive] Force-enabled (legacy relay logic is retired, this is now the only motor control path)");
     }
     enter(lockout ? MDRV_LOCKED_OUT : MDRV_IDLE);
     if (lockout) {
@@ -129,6 +132,10 @@ bool motorDriveLockedOut() { return lockout; }
 
 bool motorDriveIsRunning() {
     return state == MDRV_RUNNING;
+}
+
+bool motorDriveCurrentFlowing() {
+    return currentFlowing();
 }
 
 unsigned long motorDriveRunningMs() {

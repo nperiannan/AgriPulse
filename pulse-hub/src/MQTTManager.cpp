@@ -10,7 +10,8 @@
 #include "Config.h"
 #include "Globals.h"
 #include "Logger.h"
-#include "MotorControl.h"
+#include "MotorDrive.h"
+#include "MotorControl.h"   // status accessors (buzzer countdown, reject codes, saveMotorConfig)
 #include "LoRaManager.h"
 #include "Scheduler.h"
 #include "RTCManager.h"
@@ -163,10 +164,11 @@ static void processPendingMQTT() {
     // being processed (instead of waiting for the next periodic tick, up to
     // MQTT_PUBLISH_MS later) so the app's ack detection is near-instant —
     // same pattern already used below for OTA/reboot commands.
-    if      (strcmp(cmd, "oh_on")  == 0) { turnOnOHMotor(REASON_MANUAL_APP);  publishMQTTStatus(); }
-    else if (strcmp(cmd, "oh_off") == 0) { turnOffOHMotor(REASON_MANUAL_APP); publishMQTTStatus(); }
-    else if (strcmp(cmd, "ug_on")  == 0) { turnOnUGMotor(REASON_MANUAL_APP);  publishMQTTStatus(); }
-    else if (strcmp(cmd, "ug_off") == 0) { turnOffUGMotor(REASON_MANUAL_APP); publishMQTTStatus(); }
+    // oh/ug retired 2026-08-07 (legacy two-motor model); mapped onto well/bore.
+    if      (strcmp(cmd, "oh_on")  == 0) { motorDriveRequestStart(MOTOR_WELL, REASON_MANUAL_APP); publishMQTTStatus(); }
+    else if (strcmp(cmd, "oh_off") == 0) { motorDriveRequestStop(REASON_MANUAL_APP);               publishMQTTStatus(); }
+    else if (strcmp(cmd, "ug_on")  == 0) { motorDriveRequestStart(MOTOR_BORE, REASON_MANUAL_APP); publishMQTTStatus(); }
+    else if (strcmp(cmd, "ug_off") == 0) { motorDriveRequestStop(REASON_MANUAL_APP);               publishMQTTStatus(); }
     else if (strcmp(cmd, "ping") == 0) {
         // Reply to the backend's heartbeat ping — completes the round trip
         // started by publishHeartbeatRequest() below. Acked immediately on
@@ -549,6 +551,14 @@ void initMQTT() {
     seedDefaultsIfEmpty();
     loadConfig();
 
+    // mqttConnect() runs on the same core/loop as the web server (see
+    // mqttLoop() call site in main.cpp). PubSubClient::connect() blocks on
+    // this socket for the DNS lookup + TCP handshake with no bound of its
+    // own; against a dynamic-DNS host that's slow or briefly unreachable that
+    // can stall the whole loop — and every pending HTTP request — for
+    // several seconds. Capping it here bounds the worst case instead of
+    // inheriting whatever the platform's default connect timeout is.
+    s_wifiClient.setTimeout(3000);
     s_mqtt.setServer(s_broker, s_port);
     s_mqtt.setCallback(onMessage);
     s_mqtt.setKeepAlive(60);

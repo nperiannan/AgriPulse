@@ -179,6 +179,13 @@ void addHistoryRecord(HistEvent evt, TankState oh, TankState ug, uint8_t reason,
     writeHeader();
 }
 
+void addZoneHistoryRecord(HistEvent evt, uint8_t zoneId, uint8_t reason) {
+    // ugState is left at TANK_STATE_UNKNOWN (0) — unused for zone events, but
+    // giving it an explicit value rather than raw 0 keeps the record's meaning
+    // self-documenting to anyone reading raw EEPROM later.
+    addHistoryRecord(evt, (TankState)zoneId, TANK_STATE_UNKNOWN, reason);
+}
+
 // ---------------------------------------------------------------------------
 //  Formatting helpers
 // ---------------------------------------------------------------------------
@@ -191,8 +198,14 @@ static const char* evtStr(uint8_t e) {
         case HIST_OH_STATE_CHG: return "OH State";
         case HIST_UG_STATE_CHG: return "UG State";
         case HIST_BOOT:         return "Boot";
+        case HIST_ZONE_OPEN:    return "Zone Open";
+        case HIST_ZONE_CLOSE:   return "Zone Close";
         default:                return "?";
     }
+}
+
+static inline bool isZoneEvent(uint8_t e) {
+    return e == HIST_ZONE_OPEN || e == HIST_ZONE_CLOSE;
 }
 
 static const char* stStr(uint8_t s) {
@@ -270,8 +283,16 @@ String getHistoryJson(uint16_t maxRecords) {
         out += "{\"ts\":";    out += r.timestamp;
         out += ",\"time\":\""; out += fmtEpoch(r.timestamp); out += '"';
         out += ",\"ev\":\"";   out += evtStr(r.event);        out += '"';
-        out += ",\"oh\":\"";   out += stStr(r.ohState);       out += '"';
-        out += ",\"ug\":\"";   out += stStr(r.ugState);       out += '"';
+        if (isZoneEvent(r.event)) {
+            // ohState is the repurposed zone-id field for these two event
+            // types (see History.h) — the frontend maps it to the zone's
+            // CURRENT name via /api/zones, since names are user-editable and
+            // a renamed zone should show its new name in old history too.
+            out += ",\"zoneId\":"; out += (int)r.ohState;
+        } else {
+            out += ",\"oh\":\"";   out += stStr(r.ohState);       out += '"';
+            out += ",\"ug\":\"";   out += stStr(r.ugState);       out += '"';
+        }
         out += ",\"ohM\":";    out += (r.flags & 0x01) ? "true" : "false";
         out += ",\"ugM\":";    out += (r.flags & 0x02) ? "true" : "false";
         uint8_t rc = (uint8_t)((r.flags >> 4) & 0x0F);

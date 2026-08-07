@@ -53,8 +53,18 @@ void motorDriveClearFault();
 MotorDriveState motorDriveState();
 const char* motorDriveStateName(MotorDriveState s);
 
-// True only when current confirms the motor is turning.
+// True only when current confirms the motor is turning (state == MDRV_RUNNING
+// specifically — the drive's own idea of "normal operation").
 bool motorDriveIsRunning();
+
+// True whenever MEASURED CURRENT says the motor is turning, independent of
+// drive state. Deliberately different from motorDriveIsRunning(): during
+// MDRV_STOP_PULSE/STOP_CONFIRM the state has already left MDRV_RUNNING but
+// current has not yet fallen, and during MDRV_WELDED current is — by
+// definition — still confirmed flowing even though state is neither RUNNING
+// nor any other "operating" state. Anything that needs to know "is it safe to
+// close a valve" must ask this, not motorDriveIsRunning() or the state name.
+bool motorDriveCurrentFlowing();
 
 // What the changeover is currently selecting.
 MotorId motorDriveSelected();

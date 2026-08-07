@@ -214,22 +214,38 @@ AgriPulse/
 
 ## Hardware
 
-> Pin map below reflects the **v2.0 PCB**. The v1.x board used I2C SDA=18/SCL=17, UG float GPIO42, touch GPIO40/41, LCD 0x27 — selectable at build time via the `BOARD_V2` flag.
+> **The deployed board is v1.0**, and the pin map below reflects it. This is what
+> the default `nebulas3` / `nebulas3_serial` environments build. The v2.0 columns
+> are listed alongside for reference only and are selected by the `BOARD_V2` flag
+> (`nebulas3_v2` envs) — do **not** build those for this unit.
 
-| Component | Details |
-| --- | --- |
-| Controller | ESP32-S3 Nebula S3 |
-| OH Relay | GPIO 1 (RLY1 — Overhead tank motor) |
-| UG Relay | GPIO 2 (RLY2 — Underground tank motor) |
-| Buzzer | GPIO 3 |
-| UG Float Switch | GPIO 47 (INPUT_PULLUP, HIGH=FULL) |
-| Touch Switch OH | GPIO 17 |
-| Touch Switch UG | GPIO 18 |
-| I2C LCD | 16×2, auto-detected at 0x3F (SDA=8, SCL=9) |
-| RTC | DS3231 (I2C 0x68) |
-| EEPROM | AT24C512 (I2C 0x57) |
-| LoRa | RFM95 on HSPI (CS=10, IRQ=14, RST=21) — 865 MHz |
-| OH Tank node | ATmega328 + LoRa, float switch (replaces HC-SR04T ultrasonic) |
+| Component | v1.0 — deployed | v2.0 — reference only |
+| --- | --- | --- |
+| Controller | ESP32-S3 Nebula S3 | same |
+| OH Relay | GPIO 1 (RLY1 — START, emulates the starter's green button) | same |
+| UG Relay | GPIO 2 (RLY2 — STOP, emulates the starter's red button) | same |
+| Changeover Relay | GPIO 35 (RLY3 — selects well vs borewell contactor) | same |
+| Buzzer | GPIO 3 | same |
+| UG Float Switch | GPIO 42 | GPIO 47 |
+| Touch Switch OH | GPIO 41 | GPIO 17 |
+| Touch Switch UG | GPIO 40 | GPIO 18 |
+| **I2C bus** | **SDA=18, SCL=17** | SDA=8, SCL=9 |
+| I2C LCD | 16×2, auto-detected, typically 0x27 | typically 0x3F |
+| RTC | DS3231 (I2C 0x68) | same |
+| EEPROM | AT24C512 (I2C 0x50–0x57) | same |
+| Zone valves | 8-channel I2C relay board (PCF8574 / MCP23017) | same |
+| 3-phase meter | ADE7758 on FSPI (SCLK=4, MISO=5, MOSI=6, CS=48, IRQ=46) | same |
+| LoRa | RFM95 on HSPI (CS=10, IRQ=14, RST=21, DIO1=8) — 865 MHz | DIO1 not wired |
+| OH Tank node | ATmega328 + LoRa, float switch | same |
+
+> On v1.0, **GPIO8 is the LoRa DIO1 line** — it is not free, and must never be
+> repurposed (e.g. as an alternate I2C SDA) while the radio is running.
+
+### Flash
+
+Verified by reading the chip directly (`esptool flash_id` → manufacturer `c8`,
+device `4017`): **8 MB**. The stock PlatformIO board file claims 4 MB, which is
+wrong; `platformio.ini` overrides it. Partitions give each of two OTA slots 3 MB.
 
 ---
 

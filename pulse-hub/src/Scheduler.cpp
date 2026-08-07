@@ -1,7 +1,8 @@
 #include "Scheduler.h"
 #include "Logger.h"
 #include "Globals.h"
-#include "MotorControl.h"
+#include "MotorDrive.h"
+#include "MotorControl.h"   // preWarnBuzzer() still used for the pre-start warning
 #include "Buzzer.h"
 #include "Config.h"
 #include <Preferences.h>
@@ -95,7 +96,7 @@ void checkSchedules() {
                     }
                 }
                 if (!anyRunning) {
-                    if (isUG) turnOffUGMotor(REASON_SCHEDULED); else turnOffOHMotor(REASON_SCHEDULED);
+                    motorDriveRequestStop(REASON_SCHEDULED);
                     Log(INFO, "[Sched] " + String(i) + " stopped (disabled)");
                 }
             }
@@ -123,8 +124,7 @@ void checkSchedules() {
             Log(INFO, "[Sched] " + String(i) + " (" + (isUG?"UG":"OH") + ") starting at " + s.time
                 + " for " + String(s.duration) + " min");
             s.preBuzzing = false;
-            if (isUG) startScheduledUGMotor(REASON_SCHEDULED);
-            else      startScheduledOHMotor(REASON_SCHEDULED);
+            motorDriveRequestStart(isUG ? MOTOR_BORE : MOTOR_WELL, REASON_SCHEDULED);
             s.isRunning = true;
             s.startTime = millis();
         }
@@ -142,9 +142,7 @@ void checkSchedules() {
                         anyRunning = true; break;
                     }
                 }
-                if (!anyRunning) {
-                    if (isUG) turnOffUGMotor(REASON_SCHEDULED); else turnOffOHMotor(REASON_SCHEDULED);
-                }
+                if (!anyRunning) motorDriveRequestStop(REASON_SCHEDULED);
             }
         }
     }

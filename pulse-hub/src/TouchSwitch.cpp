@@ -19,7 +19,8 @@
 #include "Config.h"
 #include "Logger.h"
 #include "Globals.h"
-#include "MotorControl.h"
+#include "MotorDrive.h"
+#include "History.h"   // REASON_MANUAL_TOUCH
 
 // Last raw pin state (for edge detection)
 static bool lastOHTouch = false;
@@ -43,30 +44,31 @@ void initTouchSwitches() {
 void pollTouchSwitches() {
     unsigned long now = millis();
 
-    // --- OH button (active LOW) ---
+    // Retired 2026-08-07: real hardware is one starter selected between WELL
+    // and BORE via changeover, not two independent OH/UG motors. The two
+    // panel buttons now toggle WELL and BORE respectively through the drive.
     bool ohNow = (digitalRead(TOUCH_OH_PIN) == LOW);
     if (ohNow && !lastOHTouch && (now - lastOHTriggerMs >= TOUCH_DEBOUNCE_MS)) {
         lastOHTriggerMs = now;
-        if (ohMotorRunning || isOHBuzzerPending()) {
-            Log(INFO, "[Touch] OH button → OFF / cancel");
-            turnOffOHMotor(REASON_MANUAL_TOUCH);
+        if (motorDriveIsRunning() && motorDriveSelected() == MOTOR_WELL) {
+            Log(INFO, "[Touch] Well button -> STOP");
+            motorDriveRequestStop(REASON_MANUAL_TOUCH);
         } else {
-            Log(INFO, "[Touch] OH button → Motor ON");
-            turnOnOHMotor(REASON_MANUAL_TOUCH);   // returns early if already running/pending
+            Log(INFO, "[Touch] Well button -> START");
+            motorDriveRequestStart(MOTOR_WELL, REASON_MANUAL_TOUCH);
         }
     }
     lastOHTouch = ohNow;
 
-    // --- UG button (active LOW) ---
     bool ugNow = (digitalRead(TOUCH_UG_PIN) == LOW);
     if (ugNow && !lastUGTouch && (now - lastUGTriggerMs >= TOUCH_DEBOUNCE_MS)) {
         lastUGTriggerMs = now;
-        if (ugMotorRunning || isUGBuzzerPending()) {
-            Log(INFO, "[Touch] UG button → OFF / cancel");
-            turnOffUGMotor(REASON_MANUAL_TOUCH);
+        if (motorDriveIsRunning() && motorDriveSelected() == MOTOR_BORE) {
+            Log(INFO, "[Touch] Bore button -> STOP");
+            motorDriveRequestStop(REASON_MANUAL_TOUCH);
         } else {
-            Log(INFO, "[Touch] UG button → Motor ON");
-            turnOnUGMotor(REASON_MANUAL_TOUCH);   // returns early if already running/pending
+            Log(INFO, "[Touch] Bore button -> START");
+            motorDriveRequestStart(MOTOR_BORE, REASON_MANUAL_TOUCH);
         }
     }
     lastUGTouch = ugNow;

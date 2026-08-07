@@ -316,6 +316,14 @@ static void wifiTask(void* /*param*/) {
     WiFi.setAutoReconnect(false);   // disable built-in 3s scan loop — we manage reconnects manually
     esp_wifi_set_country_code("IN", true);  // India: channels 1-13, prevents missing ch13 APs
 
+    // STA modem sleep (WIFI_PS_MIN_MODEM, Arduino's default) periodically powers
+    // the radio down between DTIM beacons to save energy. With only STA active
+    // that's invisible; with AP+STA sharing one radio, the same sleep cycling
+    // steals airtime from softAP client traffic, which is what made the HTTP UI
+    // sluggish/unresponsive whenever a connection attempt (or the retry scan)
+    // was in flight. This unit is mains-powered, so there is nothing to save.
+    WiFi.setSleep(false);
+
     WiFi.softAP(DEFAULT_AP_SSID, getApPassword().c_str());
     vTaskDelay(pdMS_TO_TICKS(200));
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
