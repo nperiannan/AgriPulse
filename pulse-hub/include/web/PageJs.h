@@ -206,15 +206,22 @@ var Zones={
       var h='';
       for(var i=0;i<d.zones.length;i++){var z=d.zones[i];
         var blocked=!z.open&&full;
-        var usedBy=Zones.programLinks[i];   // populated by Zones.load(), see below
-        h+='<div class="z'+(z.open?' on':'')+'">'
+        var usedBy=Zones.programLinks[i];   // [{name,win}, ...], populated by Zones.load()
+        // Tile is small \u2014 full "Odd Days 30 Min 05:30\u201305:45, ...\u00d7N" would
+        // overflow it. Show just the program name(s), full windows in the
+        // hover tooltip (names may contain spaces, so join on an entry
+        // object rather than splitting a formatted string back apart).
+        var usedNames=usedBy?usedBy.map(function(u){return Zones.esc(u.name);})
+          .filter(function(n,idx,arr){return arr.indexOf(n)===idx;}):null;
+        var usedTitle=usedBy?Zones.esc(usedBy.map(function(u){return u.name+' '+u.win;}).join(', ')):'';
+        h+='<div class="z'+(z.open?' on':'')+'"'+(usedBy?' title="'+usedTitle+'"':'')+'>'
           +'<div class="zn">'+z.name
             // The diverter sends borewell water to the well for storage rather
             // than to a field \u2014 worth marking so it isn't run expecting crop.
             +(z.kind==='diverter'?'<div class="dt">to well</div>':'')+'</div>'
           +'<div class="zs">'+(z.open
               ? (Zones.mmss(z.left_s)+' left'+(z.source==='program'?' \u00b7 program':''))
-              : (usedBy?('in '+usedBy.join(', ')):'closed'))+'</div>'
+              : (usedNames?('in '+usedNames.join(', ')):'closed'))+'</div>'
           +'<button class="btn-s zbtn'+(z.open?' btn-d':'')+'" data-zid="'+i+'" data-zact="'
             +(z.open?'stop':'run')+'"'+(blocked?' disabled title="Valve limit reached"':'')+'>'
             +(z.open?'Stop':'Run')+'</button>'
@@ -224,7 +231,7 @@ var Zones={
       if(!Zones.namesLoaded){Zones.namesLoaded=true;Zones.renderNames(d.zones);}
     }).catch(function(){});
   },
-  programLinks:{},   // {zoneId: ['Program A', ...]} \u2014 which enabled programs water this zone
+  programLinks:{},   // {zoneId: ['Program A 05:30\u201305:45', ...]} \u2014 only enabled programs
   load:function(){
     // The one-time /api/programs fetch lives here (Zones tab open / rename
     // save), never in the continuous poll cycle \u2014 that cycle already caused
@@ -233,10 +240,19 @@ var Zones={
       Zones.programLinks={};
       (pd.programs||[]).forEach(function(p){
         if(!p.enabled)return;
-        (p.zoneMin||[]).forEach(function(min,zid){
-          if(min<=0)return;
-          if(!Zones.programLinks[zid])Zones.programLinks[zid]=[];
-          Zones.programLinks[zid].push(p.name);
+        // Sequence order matches the firmware exactly: ascending zone id,
+        // skipping 0-minute zones, back to back with no gap (nextZoneAfter()
+        // in Programs.cpp) \u2014 so the cumulative offset computed here is the
+        // real clock time that zone will actually run at, not a guess.
+        var seq=[]; (p.zoneMin||[]).forEach(function(min,zid){if(min>0)seq.push(zid);});
+        var offset={}, acc=0;
+        seq.forEach(function(zid){offset[zid]=acc; acc+=p.zoneMin[zid];});
+        (p.starts||[]).forEach(function(startMin){
+          seq.forEach(function(zid){
+            var s=(startMin+offset[zid])%1440, e=(s+p.zoneMin[zid])%1440;
+            if(!Zones.programLinks[zid])Zones.programLinks[zid]=[];
+            Zones.programLinks[zid].push({name:p.name,win:Progs.hhmm(s)+'\u2013'+Progs.hhmm(e)});
+          });
         });
       });
     }).catch(function(){}).then(Zones.poll);
@@ -379,13 +395,22 @@ var Progs={
   // add/remove list instead of eight always-visible boxes).
   minMap:function(p){var m={};for(var z=0;z<p.zoneMin.length;z++){if(p.zoneMin[z]>0)m[z]=p.zoneMin[z];}return m;},
   zoneName:function(z){var zn=Progs.zoneNames[z];return zn?(zn.name+(zn.kind==='diverter'?' (to well)':'')):('Zone '+(z+1));},
-  zoneRowsHtml:function(pid,map){
-    var h='';
+  // firstStart (minutes since midnight, may be undefined if no start time is
+  // set yet) drives the "05:30 → 05:45" preview per zone — computed the same
+  // way the firmware actually sequences them: ascending zone id, back to back.
+  zoneRowsHtml:function(pid,map,firstStart){
+    var h='', acc=0;
     Object.keys(map).map(Number).sort(function(a,b){return a-b;}).forEach(function(z){
+      var win='';
+      if(firstStart!==undefined&&firstStart!==null){
+        win=Progs.hhmm((firstStart+acc)%1440)+' &rarr; '+Progs.hhmm((firstStart+acc+map[z])%1440);
+      }
       h+='<div class="row" data-zrow="'+z+'"><span class="lb">'+Progs.zoneName(z)+'</span>'
         +'<input class="inp n" type="number" min="1" max="240" id="pg_zm_'+pid+'_'+z+'" value="'+map[z]+'">'
         +'<span class="u">min</span>'
+        +(win?'<span class="dt" style="min-width:96px;text-align:right">'+win+'</span>':'')
         +'<button class="btn-s btn-d" data-zremove="'+z+'" data-pid="'+pid+'">Remove</button></div>';
+      acc+=map[z];
     });
     var opts='';
     for(var z=0;z<Progs.zoneNames.length;z++){
@@ -457,12 +482,55 @@ var Progs={
     Progs.render();
   },
   toggleEnabled:function(id){UI.act('/api/programs/cmd',{cmd:'toggle',id:id},null).then(Progs.load);},
+  findProgram:function(id){
+    id=parseInt(id,10);
+    if(!Progs.lastData)return null;
+    for(var i=0;i<Progs.lastData.programs.length;i++){if(Progs.lastData.programs[i].id===id)return Progs.lastData.programs[i];}
+    return null;
+  },
+  // Whether calendar date `d` is a watering day under this program's rule.
+  // Mirrors isWateringDay() in Programs.cpp, except WDAY_INTERVAL — that needs
+  // lastRunEpoch, which isn't sent to the client, so it's handled separately
+  // as a static "every N days" label rather than a specific predicted date.
+  dayMatches:function(p,d){
+    switch(Number(p.dayMode)){
+      case 0: return (p.dayMask&(1<<d.getDay()))!==0;
+      case 1: return (d.getDate()%2)===1;
+      case 2: return (d.getDate()%2)===0;
+      default: return false;
+    }
+  },
+  nextRunText:function(p){
+    if(!p.enabled||!p.starts||!p.starts.length)return null;
+    if(Number(p.dayMode)===3)return 'every '+(p.interval||2)+' day(s)';
+    var starts=p.starts.slice().sort(function(a,b){return a-b;});
+    var now=new Date(), nowMin=now.getHours()*60+now.getMinutes();
+    for(var add=0;add<8;add++){
+      var d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+add);
+      if(!Progs.dayMatches(p,d))continue;
+      for(var i=0;i<starts.length;i++){
+        if(add>0||starts[i]>nowMin){
+          var label=add===0?'today':add===1?'tomorrow':d.toLocaleDateString(undefined,{weekday:'short'});
+          return label+' '+Progs.hhmm(starts[i]);
+        }
+      }
+    }
+    return null;
+  },
+  totalRunHtml:function(map,firstStart){
+    var total=0; Object.keys(map).forEach(function(k){total+=map[k];});
+    if(!total)return '';
+    var ends=(firstStart!==undefined&&firstStart!==null)?(' &middot; ends '+Progs.hhmm((firstStart+total)%1440)):'';
+    return '<div class="row"><span class="lb">Total run</span><span>'+total+' min'+ends+'</span></div>';
+  },
   card:function(p){
     var running=p.running;
+    var next=Progs.nextRunText(p);
     var h='<div class="card">'
       +'<div class="ct">'+p.name+' '
       +(p.enabled?'<span class="badge b-ok">enabled</span>':'<span class="badge b-off">disabled</span>')
       +(running?' <span class="badge b-ok">running &mdash; zone '+(p.currentZone+1)+'</span>':'')
+      +(next?' <span class="badge b-off">next: '+next+'</span>':'')
       +'</div>'
       +'<div class="row"><input type="checkbox" id="pg_en_'+p.id+'"'+(p.enabled?' checked':'')+'> <span class="lb">Enabled</span>'
         +'<input class="inp w" id="pg_name_'+p.id+'" value="'+p.name.replace(/"/g,'&quot;')+'" maxlength="15" style="max-width:160px"></div>'
@@ -484,8 +552,9 @@ var Progs={
       +'<div class="row"><span class="lb">Water source</span>'
         +'<select class="inp" id="pg_src_'+p.id+'"><option value="well">Well Motor</option><option value="bore">Bore Motor</option></select></div>'
       +'<div style="padding:8px 0 0;border-top:1px solid var(--bd)"><div class="hint" style="margin-bottom:6px">Zones in this program &mdash; run one after another, in the order added</div>'
-      +'<div id="pg_zonesbox_'+p.id+'">'+Progs.zoneRowsHtml(p.id,Progs.minMap(p))+'</div>'
+      +'<div id="pg_zonesbox_'+p.id+'">'+Progs.zoneRowsHtml(p.id,Progs.minMap(p),p.starts&&p.starts[0])+'</div>'
       +'</div>'
+      +Progs.totalRunHtml(Progs.minMap(p),p.starts&&p.starts[0])
       +'<div class="brow">'
         +'<button class="btn" id="btnProgSave_'+p.id+'">Save program</button>'
         +(running?'<button class="btn-s btn-d" id="btnProgStop_'+p.id+'">Stop</button>'
@@ -709,14 +778,16 @@ UI.el('progArea').addEventListener('click',function(e){
     var pid=addBtn.dataset.pid, sel=UI.el('pg_addzone_'+pid);
     if(!sel||sel.value==='')return;
     var m=Progs.readZoneBox(pid); m[parseInt(sel.value,10)]=10;
-    UI.el('pg_zonesbox_'+pid).innerHTML=Progs.zoneRowsHtml(pid,m);
+    var pr=Progs.findProgram(pid);
+    UI.el('pg_zonesbox_'+pid).innerHTML=Progs.zoneRowsHtml(pid,m,pr&&pr.starts&&pr.starts[0]);
     return;
   }
   var rmBtn=e.target.closest('button[data-zremove]');
   if(rmBtn){
     var pid2=rmBtn.dataset.pid;
     var m2=Progs.readZoneBox(pid2); delete m2[parseInt(rmBtn.dataset.zremove,10)];
-    UI.el('pg_zonesbox_'+pid2).innerHTML=Progs.zoneRowsHtml(pid2,m2);
+    var pr2=Progs.findProgram(pid2);
+    UI.el('pg_zonesbox_'+pid2).innerHTML=Progs.zoneRowsHtml(pid2,m2,pr2&&pr2.starts&&pr2.starts[0]);
     return;
   }
   var b=e.target.closest('button[id]'); if(!b)return;

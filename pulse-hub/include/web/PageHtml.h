@@ -190,13 +190,15 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <input id="pd_seasonal" class="inp" type="number" min="10" max="200" step="5"><span class="u">% of programmed time</span></div>
       <div class="row"><span class="lb">Rain delay</span>
         <input id="pd_rain" class="inp" type="number" min="0" max="14"><span class="u">days &mdash; skip all watering</span></div>
-      <div class="brow"><button class="btn-s" id="btnProgDefaultsSave">Save defaults</button></div>
+      <div class="brow" style="justify-content:space-between">
+        <button class="btn-s" id="btnProgAdd">+ Add program</button>
+        <button class="btn-s" id="btnProgDefaultsSave">Save defaults</button>
+      </div>
     </div>
     <div id="progArea" class="grid full" style="grid-column:1/-1;display:contents">
       <div class="card full" style="grid-column:1/-1">
         <div class="ct">Saved Programs</div>
         <div id="progList"></div>
-        <div class="brow"><button class="btn-s" id="btnProgAdd">+ Add program</button></div>
       </div>
       <div id="progEditors" class="grid full" style="grid-column:1/-1"></div>
     </div>
