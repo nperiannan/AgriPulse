@@ -236,12 +236,61 @@ var Zones={
     }).catch(function(){});
   },
   programLinks:{},   // {zoneId: ['Program A 05:30\u201305:45', ...]} \u2014 only enabled programs
+  // One card per ENABLED program \u2014 same shape as the Programs tab's summary
+  // card (Progs.render()), so "what will actually run" is visible without
+  // switching tabs. Reuses Progs' helpers (zoneName/hhmm/dayModeShort/esc)
+  // rather than duplicating them; Progs.zoneName() falls back to "Zone N"
+  // if Progs.zoneNames hasn't been populated yet (Programs tab never opened).
+  renderProgramCards:function(pd){
+    var progs=(pd.programs||[]).filter(function(p){return p.enabled;});
+    var h='';
+    for(var i=0;i<progs.length;i++){var p=progs[i];
+      var zoneNames=[];
+      for(var z=0;z<p.zoneMin.length;z++){if(p.zoneMin[z]>0)zoneNames.push(Progs.zoneName(z));}
+      var next=Progs.nextRunText(p);
+      h+='<div class="card">'
+        +'<div class="ct">'+Progs.esc(p.name)+' <span class="badge b-ok">enabled</span>'
+        +(p.running?' <span class="badge b-ok">running</span>':'')
+        +'</div>'
+        +'<div class="row"><span class="lb">Status</span><span>'+(next||'enabled, no start time set')+'</span></div>'
+        +'<div class="row"><span class="lb">Start times</span><span>'
+          +(p.starts&&p.starts.length?p.starts.map(Progs.hhmm).join(', '):'&mdash;')+'</span></div>'
+        +'<div class="row"><span class="lb">Days</span><span>'+Progs.dayModeShort(p)+'</span></div>'
+        +'<div class="row"><span class="lb">Zones</span><span>'+(zoneNames.length?zoneNames.join(', '):'&mdash;')+'</span></div>'
+        +'<div class="brow">'
+          +'<button class="btn-s" data-zptoggle="'+p.id+'">Disable</button>'
+          +'<button class="btn-s" data-zpedit="'+p.id+'">Edit</button>'
+          +'<button class="btn-s btn-d" data-zpdel="'+p.id+'">Delete</button>'
+        +'</div></div>';
+    }
+    UI.el('zoneProgList').innerHTML=h||'<div class="hint">No enabled programs \u2014 enable or add one on the Programs tab.</div>';
+  },
+  progToggle:function(id){
+    UI.act('/api/programs/cmd',{cmd:'toggle',id:id},null).then(function(){Zones.load();if(Progs.lastData)Progs.load();});
+  },
+  progEdit:function(id){
+    // Switching tabs re-triggers Progs.load() (see UI.show); toggleEdit()'s
+    // own render() runs before that fetch lands and will no-op harmlessly \u2014
+    // openIds[id] is already set by then, so the load's own render() opens
+    // the editor once the data actually arrives.
+    UI.show('p-prog');
+    Progs.toggleEdit(id);
+  },
+  progDelete:function(id){
+    if(!window.confirm('Delete this program? This cannot be undone.'))return;
+    UI.act('/api/programs/cmd',{cmd:'delete',id:id},'Deleted').then(function(){
+      Progs.openIds={};
+      Zones.load();
+      if(Progs.lastData)Progs.load();
+    });
+  },
   load:function(){
     // The one-time /api/programs fetch lives here (Zones tab open / rename
     // save), never in the continuous poll cycle \u2014 that cycle already caused
     // real problems once (see PageJs.h header) when it grew unbounded.
     return Api.get('/api/programs').then(function(pd){
       Zones.programLinks={};
+      Zones.renderProgramCards(pd);
       (pd.programs||[]).forEach(function(p){
         if(!p.enabled)return;
         // Sequence order matches the firmware exactly: ascending zone id,
@@ -858,6 +907,11 @@ UI.el('scanWrap').addEventListener('click',function(e){
 bind('btnZonesStopAll',function(){Zones.cmd({cmd:'stopall'});});
 bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanned').then(Zones.poll);});
 bind('btnZoneNamesSave',Zones.saveNames);
+UI.el('zoneProgArea').addEventListener('click',function(e){
+  var tgl=e.target.closest('button[data-zptoggle]'); if(tgl){Zones.progToggle(tgl.dataset.zptoggle);return;}
+  var edit=e.target.closest('button[data-zpedit]');   if(edit){Zones.progEdit(edit.dataset.zpedit);return;}
+  var del=e.target.closest('button[data-zpdel]');     if(del){Zones.progDelete(del.dataset.zpdel);return;}
+});
 bind('btnProgDefaultsSave',function(){
   UI.act('/api/programs/cmd',{cmd:'defaults',source:UI.el('pd_source').value,
     seasonalPct:UI.el('pd_seasonal').value,rainDelayDays:UI.el('pd_rain').value},'Defaults saved').then(Progs.load);

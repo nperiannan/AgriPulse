@@ -115,6 +115,10 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <div class="brow"><button class="btn-s" id="btnZoneNamesSave">Save names</button></div>
       </details>
     </div>
+    <div id="zoneProgArea" class="grid full" style="grid-column:1/-1;display:contents">
+      <div class="ct" style="grid-column:1/-1;margin:6px 0 -4px">Scheduled Programs</div>
+      <div id="zoneProgList" style="display:contents"></div>
+    </div>
    </div>
   </div>
 
