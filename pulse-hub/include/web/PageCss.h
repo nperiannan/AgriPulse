@@ -79,6 +79,8 @@ ul.chk li:first-child{border-top:none}
 .row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--bd);flex-wrap:wrap}
 .row:first-child{border-top:none}
 .lb{flex:1;min-width:128px;font-size:12.5px}
+.rv{flex:1;min-width:0;font-size:12.5px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reserve{min-height:46px}
 .inp{background:var(--card2);color:var(--tx);border:1px solid var(--bd2);border-radius:6px;
  padding:6px 9px;font-size:12.5px;width:90px}
 .inp.w{width:100%;min-width:110px}

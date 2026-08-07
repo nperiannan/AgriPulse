@@ -428,15 +428,15 @@ var Net={
       (function poll(){
         Api.fetchT('/wifiscanresult',null,6000).then(function(r){return r.json();}).then(function(d){
           if(d&&d.ready){Net.renderScan(d.networks||[]);return;}
-          if(Date.now()>deadline){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';return;}
+          if(Date.now()>deadline){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';UI.toast('Scan failed or timed out','err');return;}
           setTimeout(poll,600);
-        }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';});
+        }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';UI.toast('Scan failed or timed out','err');});
       })();
-    }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';});
+    }).catch(function(){w.innerHTML='<div class="hint">Scan failed or timed out.</div>';UI.toast('Scan failed or timed out','err');});
   },
   renderScan:function(a){
     var w=UI.el('scanWrap');
-    if(!a||!a.length){w.innerHTML='<div class="hint">No networks found. Try again — the hub’s own AP can mask weak signals.</div>';return;}
+    if(!a||!a.length){w.innerHTML='<div class="hint">No networks found. Try again — the hub’s own AP can mask weak signals.</div>';UI.toast('No networks found','err');return;}
     a.sort(function(x,y){return y.rssi-x.rssi;});
     var h='<div class="hint" style="margin:6px 0 4px">Found '+a.length+' network'+(a.length>1?'s':'')+' — pick one to join.</div>';
     for(var i=0;i<a.length;i++){var n=a[i];
@@ -444,6 +444,7 @@ var Net={
          '</span><span class="dt">'+Net.bars(n.rssi)+' · ch'+n.ch+'</span>'+
          '<button class="btn-s" data-join="'+encodeURIComponent(n.ssid)+'" data-open="'+(n.open?1:0)+'">Join</button></div>';}
     w.innerHTML=h;
+    UI.toast('Found '+a.length+' network'+(a.length>1?'s':''),'ok');
   },
   join:function(ssid,isOpen){
     var pass='';
@@ -771,7 +772,18 @@ var Hist={
 /* ---- System ---- */
 var Sys={
   load:function(){Sys.info();Sys.logs();},
-  row:function(label,value){return '<div class="row"><span class="lb">'+label+'</span><span>'+value+'</span></div>';},
+  // The value span gets its own shrinkable/truncating flex slot (.rv) instead
+  // of the default flex item, which — once label+value together outgrow the
+  // card — used to wrap the WHOLE value onto its own line (STA/Bluetooth rows
+  // with a long SSID+IP or long text were the ones that actually hit this).
+  // min-width:0 lets it shrink below its own content width so the row always
+  // stays on one line; a title attribute keeps the full text reachable on
+  // hover if it does truncate. Tags are stripped for the title since value
+  // can carry inline HTML (e.g. the red "not detected" spans).
+  row:function(label,value){
+    var plain=String(value).replace(/<[^>]*>/g,'').replace(/"/g,'&quot;');
+    return '<div class="row"><span class="lb">'+label+'</span><span class="rv" title="'+plain+'">'+value+'</span></div>';
+  },
   bytes:function(n){return n>=1048576?(n/1048576).toFixed(2)+' MB':(n/1024).toFixed(0)+' KB';},
   hex:function(n){return '0x'+Number(n).toString(16).toUpperCase();},
   uptime:function(s){
@@ -788,9 +800,10 @@ var Sys={
         Sys.row('Last restart',d.resetReason)+
         Sys.row('Chip',d.chipModel+' rev '+d.chipRev)+
         Sys.row('CPU',d.cpuCores+' cores @ '+d.cpuFreqMHz+' MHz')+
+        Sys.row('Core 0','WiFi / OTA / NTP')+
+        Sys.row('Core 1','Control loop')+
         Sys.row('MAC',d.macAddress)+
-        Sys.row('ESP-IDF',d.sdkVersion)+
-        Sys.row('Core split','WiFi/OTA/NTP on core 0, control loop on core 1');
+        Sys.row('ESP-IDF',d.sdkVersion);
 
       var heapPct=d.heapSize?Math.round(100*(d.heapSize-d.freeHeap)/d.heapSize):0;
       var flashPct=d.freeSketch?Math.round(100*d.sketchSize/d.freeSketch):0;
@@ -833,21 +846,25 @@ var Sys={
         var addrs=d.addrs.map(function(a){return Sys.hex(a);}).join(', ');
         h='<div class="banner bn-warn" style="display:block;background:rgba(63,185,80,.12);'+
           'border-color:var(--ok);color:var(--ok)">'+d.found+' device(s) found: '+addrs+'</div>';
+        UI.toast(d.found+' device(s) found: '+addrs,'ok');
       } else if(d.clamped){
         h='<div class="banner" style="display:block">Bus is clamped LOW even with the internal '+
           'pull-up — something is holding a line down (stuck slave, or a short). A recovery pulse '+
           'was attempted automatically; power-cycle the board if this persists.</div>';
+        UI.toast('Bus clamped LOW — stuck slave or short?','err');
       } else if(!d.pullups){
         h='<div class="banner" style="display:block">Lines float LOW without a pull-up — no working '+
           'pull-up resistors on the bus. Check power at each module first: an unpowered breakout '+
           'supplies neither an ACK nor a pull-up.</div>';
+        UI.toast('No pull-ups on the bus — check module power','err');
       } else {
         h='<div class="banner" style="display:block">Pull-ups are present, nothing is clamping the bus, '+
           'but no device answered on SDA'+d.sda+'/SCL'+d.scl+'. Check 3.3V/GND at each module and that '+
           'both wires are actually seated.</div>';
+        UI.toast('No devices answered on SDA'+d.sda+'/SCL'+d.scl,'err');
       }
       w.innerHTML=h;
-    }).catch(function(){w.innerHTML='<div class="hint">Scan failed.</div>';});
+    }).catch(function(){w.innerHTML='<div class="hint">Scan failed.</div>';UI.toast('I2C scan failed','err');});
   },
   logs:function(){
     return Api.get('/logs').then(function(d){

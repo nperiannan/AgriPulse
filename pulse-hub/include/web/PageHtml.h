@@ -231,7 +231,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <div class="brow" style="margin-bottom:4px">
         <button class="btn" id="btnWifiScan">Scan for networks</button>
       </div>
-      <div id="scanWrap"></div>
+      <div id="scanWrap" class="reserve"></div>
       <details style="margin-top:8px">
         <summary class="hint" style="cursor:pointer">Add a hidden network by name</summary>
         <div class="row" style="border:none"><input id="wSsid" class="inp w" placeholder="SSID"></div>
@@ -287,7 +287,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <div class="ct">I2C Peripherals</div>
       <div id="sysPeriph"></div>
       <div class="brow"><button class="btn-s" id="btnI2CScan">Scan I2C bus</button></div>
-      <div id="i2cScanResult"></div>
+      <div id="i2cScanResult" class="reserve"></div>
     </div>
     <div class="card full">
       <div class="ct">Log</div>
