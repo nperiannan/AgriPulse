@@ -93,14 +93,15 @@ static unsigned long smNextActionMs    = 0;
 static bool          smInCooldown      = false;
 static unsigned long smCooldownUntilMs = 0;
 
-// A totally empty async scan result (found<=0) has been observed to be
-// intermittent in AP+STA mode — the manual /wifiscan blocking scan reliably
-// finds the same networks the async pre-connect gate below sometimes misses
-// entirely. Retry a few empty scans before believing "nothing in range" and
-// paying the 15-minute cooldown for what may just have been a flaky scan.
-#define WIFI_EMPTY_SCAN_MAX_RETRIES 3
-static int smEmptyScanRetries = 0;
-static bool          smScanPending     = false; // async scan in progress (shared radio resource)
+// Escalating reconnect cooldown. A transient failure (router rebooting, a burst
+// of interference) recovers in a minute instead of stranding the device for a
+// full 15, while a genuinely absent network still settles into a slow retry
+// rhythm rather than hammering the shared radio and starving the softAP.
+// Reset to the floor on every successful association.
+#define WIFI_COOLDOWN_MIN_MS 60000UL
+static unsigned long smCooldownMs = WIFI_COOLDOWN_MIN_MS;
+
+static bool          smScanPending     = false; // a scan currently owns the shared radio
 
 // Manual scan requested by the web UI's "Scan for networks" button. Runs
 // through this same task/radio instead of a raw WiFi.scanNetworks() call from
@@ -113,6 +114,31 @@ static volatile bool smManualScanRequested = false;
 static bool          smScanIsManual        = false;
 static volatile bool smManualScanReady     = false;
 static String        smManualScanJson      = "[]"; // guarded by wifiMutex
+
+// WiFi.scanComplete() cannot be used to wait for a scan on this board. It
+// derives its own ceiling from _scanTimeout = max_ms_per_chan * 20 — 6 s at the
+// 300 ms/channel default — while a real 13-channel AP+STA sweep here measures
+// 6-8 s, so the ceiling trips shortly BEFORE the scan lands and the caller gets
+// WIFI_SCAN_FAILED (-2) instead of the results. Once tripped it stays tripped:
+// _scanStarted is never cleared, so polling longer returns -2 for ever. Raising
+// max_ms_per_chan does not rescue it either — the ceiling grows 20x per unit
+// while the sweep itself grows ~21x (13 channels x ~1.6x AP+STA interleaving
+// overhead, measured on this board), so it stays marginally short at every
+// setting. Drive completion off the SCAN_DONE event and time it out ourselves.
+#define WIFI_SCAN_TIMEOUT_MS 30000UL
+static volatile bool    smScanDoneEvt   = false;
+static volatile int16_t smScanDoneCount = 0;
+static unsigned long    smScanStartedMs = 0;
+
+static void onWifiScanDone(arduino_event_id_t /*event*/, arduino_event_info_t info) {
+    // Runs on the WiFi event task, so it only sets a flag. The results are read
+    // a tick later from wifiTask, by which point the core's own SCAN_DONE
+    // handler has certainly finished populating them.
+    smScanDoneCount = (info.wifi_scan_done.status == 0)
+                      ? (int16_t)info.wifi_scan_done.number
+                      : (int16_t)0;
+    smScanDoneEvt   = true;
+}
 
 // NTP
 static WiFiUDP       ntpUDP;
@@ -339,9 +365,9 @@ static void handleSetPriority(const char* ssid, int newPriority) {
     saveNetworks();
 }
 
-// Builds the same JSON shape the old blocking /wifiscan handler returned,
-// from an already-completed scan result (found = WiFi.scanComplete() result,
-// > 0 or 0; never call with WIFI_SCAN_RUNNING/WIFI_SCAN_FAILED).
+// Builds the same JSON shape the old blocking /wifiscan handler returned, from
+// an already-completed scan result (found = number of APs, 0 or more — never
+// negative; callers normalise WIFI_SCAN_FAILED/a timeout to 0 before calling).
 static String buildScanResultJson(int found) {
     String json = "[";
     for (int i = 0; i < found; i++) {
@@ -367,6 +393,7 @@ static void wifiTask(void* /*param*/) {
     WiFi.mode(WIFI_AP_STA);
     WiFi.setAutoReconnect(false);   // disable built-in 3s scan loop — we manage reconnects manually
     esp_wifi_set_country_code("IN", true);  // India: channels 1-13, prevents missing ch13 APs
+    WiFi.onEvent(onWifiScanDone, ARDUINO_EVENT_WIFI_SCAN_DONE); // see WIFI_SCAN_TIMEOUT_MS above
 
     // STA modem sleep (WIFI_PS_MIN_MODEM, Arduino's default) periodically powers
     // the radio down between DTIM beacons to save energy. With only STA active
@@ -431,9 +458,11 @@ static void wifiTask(void* /*param*/) {
         // never touches WiFi.scanNetworks() directly (that cross-core call is
         // what caused "Scan failed or timed out" in the first place).
         if (smScanIsManual) {
-            int found = WiFi.scanComplete();
-            if (found != WIFI_SCAN_RUNNING) {
-                String json = buildScanResultJson(found < 0 ? 0 : found);
+            bool done    = smScanDoneEvt;
+            bool timedOut = !done && (millis() - smScanStartedMs > WIFI_SCAN_TIMEOUT_MS);
+            if (done || timedOut) {
+                int n = (done && smScanDoneCount > 0) ? smScanDoneCount : 0;
+                String json = buildScanResultJson(n);
                 WiFi.scanDelete();
                 xSemaphoreTake(wifiMutex, portMAX_DELAY);
                 smManualScanJson = json;
@@ -441,14 +470,30 @@ static void wifiTask(void* /*param*/) {
                 smScanIsManual    = false;
                 smScanPending     = false;
                 smManualScanReady = true;
-                Log(INFO, "[WiFi] Manual scan complete: " + String(found < 0 ? 0 : found) + " networks");
+                if (timedOut) Log(WARN, "[WiFi] Manual scan timed out after "
+                                        + String(WIFI_SCAN_TIMEOUT_MS / 1000UL) + " s");
+                else          Log(INFO, "[WiFi] Manual scan complete: " + String(n) + " networks");
             }
         } else if (smManualScanRequested && !smScanPending) {
             smManualScanRequested = false;
-            smScanPending  = true;
-            smScanIsManual = true;
-            WiFi.scanNetworks(true, true);
-            Log(INFO, "[WiFi] Manual scan started (web UI request)");
+            smScanDoneEvt   = false;
+            smScanDoneCount = 0;
+            smScanStartedMs = millis();
+            // Returns WIFI_SCAN_RUNNING (-1) once the scan is actually under
+            // way, WIFI_SCAN_FAILED (-2) if it never started. Treating a failed
+            // start as "pending" would wedge the poll above for the full
+            // timeout, so answer the browser immediately instead.
+            if (WiFi.scanNetworks(true, true) == WIFI_SCAN_FAILED) {
+                xSemaphoreTake(wifiMutex, portMAX_DELAY);
+                smManualScanJson = "[]";
+                xSemaphoreGive(wifiMutex);
+                smManualScanReady = true;
+                Log(WARN, "[WiFi] Manual scan failed to start (radio busy?)");
+            } else {
+                smScanPending  = true;
+                smScanIsManual = true;
+                Log(INFO, "[WiFi] Manual scan started (web UI request)");
+            }
         }
 
         bool nowConnected = (WiFi.status() == WL_CONNECTED);
@@ -460,6 +505,7 @@ static void wifiTask(void* /*param*/) {
             smTryIdx          = 0;
             smTryAttempts     = 0;
             smInCooldown      = false;
+            smCooldownMs      = WIFI_COOLDOWN_MIN_MS;  // back to the fast retry floor
             xSemaphoreTake(wifiMutex, portMAX_DELAY);
             wifiSSID = WiFi.SSID();
             wifiRSSI = WiFi.RSSI();
@@ -497,7 +543,27 @@ static void wifiTask(void* /*param*/) {
                 doSynchronizeTime();
             }
         } else {
-            // Priority-ordered reconnect: 3 attempts per SSID, then 15-min cooldown
+            // Priority-ordered reconnect: N attempts per SSID, then a cooldown.
+            //
+            // There is deliberately NO pre-connect scan gate here any more
+            // (removed 2026-08-07). It used to run a full 13-channel sweep and
+            // only call WiFi.begin() if the SSID turned up in the results. That
+            // gate could never work on this board: WiFi.scanComplete() derives
+            // its own ceiling from _scanTimeout = max_ms_per_chan * 20, which is
+            // 6 s at the 300 ms/channel default, while a real AP+STA sweep here
+            // measures 6-8 s. The ceiling fired a couple of hundred ms before
+            // the scan actually landed, scanComplete() returned WIFI_SCAN_FAILED
+            // (-2), and the gate read -2 as "nothing in range" — cooling down
+            // for 15 minutes with the target network sitting there at -50 dBm.
+            // (_scanStarted is never cleared after that ceiling trips, so polling
+            // longer never recovers the result either; it returns -2 forever.)
+            // The sweep also starved the softAP for its whole duration, which is
+            // the exact AP-unreachability the gate was originally added to avoid.
+            //
+            // WiFi.begin() is strictly better here: ESP-IDF runs its own
+            // *targeted* scan for just this one SSID, which is much quicker and
+            // much less disruptive to the shared radio, and WL_NO_SSID_AVAIL
+            // then tells us authoritatively what the gate was only guessing.
             if (networkCount > 0) {
                 if (smInCooldown) {
                     if (millis() >= smCooldownUntilMs) {
@@ -507,60 +573,12 @@ static void wifiTask(void* /*param*/) {
                         smNextActionMs = millis();
                         Log(INFO, "[WiFi] Cooldown ended, retrying all networks");
                     }
-                } else if (smScanPending) {
-                    // Async scan in progress — poll without blocking so AP stays alive
-                    int found = WiFi.scanComplete();
-                    if (found == WIFI_SCAN_RUNNING) {
-                        // not done yet, check again next tick
-                    } else {
-                        smScanPending = false;
-                        bool anySeen = false;
-                        if (found <= 0) {
-                            Log(WARN, "[WiFi] Scan found no networks");
-                        } else {
-                            smEmptyScanRetries = 0;   // real results this time
-                            for (int s = 0; s < found; s++) {
-                                for (int n = 0; n < networkCount; n++) {
-                                    if (WiFi.SSID(s) == networks[n].ssid) anySeen = true;
-                                }
-                                Log(INFO, "[WiFi] Scan: " + WiFi.SSID(s)
-                                          + " ch=" + String(WiFi.channel(s))
-                                          + " RSSI=" + String(WiFi.RSSI(s)));
-                            }
-                        }
-                        WiFi.scanDelete();
-
-                        if (found <= 0 && smEmptyScanRetries < WIFI_EMPTY_SCAN_MAX_RETRIES) {
-                            smEmptyScanRetries++;
-                            Log(WARN, "[WiFi] Empty scan (" + String(smEmptyScanRetries) + "/"
-                                      + String(WIFI_EMPTY_SCAN_MAX_RETRIES) + ") - retrying before giving up");
-                            WiFi.scanNetworks(true, true);
-                            smScanPending = true;
-                        } else if (!anySeen) {
-                            smEmptyScanRetries = 0;
-                            // Associating with an absent SSID holds the shared radio for the
-                            // whole attempt window, which makes the AP's web UI unreachable.
-                            // Skip straight to cooldown rather than burning three of those.
-                            smInCooldown      = true;
-                            smCooldownUntilMs = millis() + WIFI_COOLDOWN_MS;
-                            smTryIdx          = 0;
-                            smTryAttempts     = 0;
-                            Log(WARN, "[WiFi] No configured SSID in range - cooling down, AP stays responsive");
-                        } else {
-                            smEmptyScanRetries = 0;
-                            smTryAttempts++;
-                            Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
-                                      + " -> " + networks[smTryIdx].ssid);
-                            WiFi.begin(networks[smTryIdx].ssid.c_str(), networks[smTryIdx].password.c_str());
-                            smNextActionMs = millis() + WIFI_ATTEMPT_TIMEOUT_MS;
-                        }
-                    }
                 } else if (millis() >= smNextActionMs) {
                     // Previous attempt window expired — log why it failed then advance
                     if (smTryAttempts > 0) {
                         wl_status_t ws = WiFi.status();
                         String reason;
-                        if      (ws == WL_NO_SSID_AVAIL)  reason = "SSID not found (wrong name or 5GHz-only?)";
+                        if      (ws == WL_NO_SSID_AVAIL)  reason = "SSID not found (out of range, wrong name, or 5GHz-only?)";
                         else if (ws == WL_CONNECT_FAILED)  reason = "Auth failed (wrong password?)";
                         else                               reason = "status=" + String((int)ws);
                         Log(WARN, "[WiFi] Attempt timed out -> " + networks[smTryIdx].ssid + " | " + reason);
@@ -572,23 +590,18 @@ static void wifiTask(void* /*param*/) {
                     }
                     if (smTryIdx >= networkCount) {
                         smInCooldown      = true;
-                        smCooldownUntilMs = millis() + WIFI_COOLDOWN_MS;
+                        smCooldownUntilMs = millis() + smCooldownMs;
                         smTryIdx          = 0;
-                        Log(WARN, "[WiFi] All " + String(networkCount) + " SSID(s) failed. Cooling down 15 min.");
+                        smTryAttempts     = 0;
+                        Log(WARN, "[WiFi] All " + String(networkCount) + " SSID(s) failed. Cooling down "
+                                  + String(smCooldownMs / 1000UL) + " s.");
+                        smCooldownMs = min(smCooldownMs * 2UL, WIFI_COOLDOWN_MS);
                     } else {
-                        // Kick off async scan before first attempt of each round
-                        if (smTryAttempts == 0 && smTryIdx == 0) {
-                            WiFi.scanNetworks(true, true); // async=true — AP stays alive during scan
-                            smScanPending = true;
-                            Log(INFO, "[WiFi] Async scan started");
-                            // smNextActionMs not updated here; scan completion drives next step
-                        } else {
-                            smTryAttempts++;
-                            Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
-                                      + " -> " + networks[smTryIdx].ssid);
-                            WiFi.begin(networks[smTryIdx].ssid.c_str(), networks[smTryIdx].password.c_str());
-                            smNextActionMs = millis() + WIFI_ATTEMPT_TIMEOUT_MS;
-                        }
+                        smTryAttempts++;
+                        Log(INFO, "[WiFi] Attempt " + String(smTryAttempts) + "/" + String(WIFI_MAX_ATTEMPTS_PER_NET)
+                                  + " -> " + networks[smTryIdx].ssid);
+                        WiFi.begin(networks[smTryIdx].ssid.c_str(), networks[smTryIdx].password.c_str());
+                        smNextActionMs = millis() + WIFI_ATTEMPT_TIMEOUT_MS;
                     }
                 }
             }
