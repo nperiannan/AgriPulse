@@ -132,6 +132,21 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
           <select id="zn_channel" class="inp"></select>
           <button class="btn-s" id="btnZoneAdd">+ Add zone</button>
         </div>
+        <div class="ct" style="margin-top:12px">Bore routing valves</div>
+        <div class="hint" style="margin-bottom:6px">
+          Two of the zone relays above, repurposed &mdash; not new hardware &mdash; as the bore
+          motor's routing gate: one feeds the well/tank line, the other the farm line.
+          Exactly one must be open before the bore may start. Leave both "Not set" to skip
+          this check.
+        </div>
+        <div class="row" style="border:none;flex-wrap:wrap">
+          <span class="lb">Well/tank valve</span>
+          <select id="bv_welltank" class="inp"></select>
+          <span class="lb">Farm valve</span>
+          <select id="bv_farm" class="inp"></select>
+          <button class="btn-s" id="btnBoreValvesSave">Save</button>
+        </div>
+        <div id="boreRoutingStatus" class="hint"></div>
       </details>
     </div>
     <div id="zoneProgArea" class="grid full" style="grid-column:1/-1;display:contents">
@@ -148,9 +163,12 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <div class="row"><span class="lb">Voltage min / max</span>
         <input id="v_low" class="inp" type="number" step="1"><input id="v_high" class="inp" type="number" step="1">
         <div class="hint">Phase to neutral.</div></div>
-      <div class="row"><span class="lb">Current min / max</span>
+      <div class="row"><span class="lb">Well motor current min / max</span>
         <input id="i_low" class="inp" type="number" step="0.1"><input id="i_high" class="inp" type="number" step="0.1">
         <div class="hint">The minimum catches dry run and closed discharge &mdash; on a centrifugal pump those show as LOW current, not high.</div></div>
+      <div class="row"><span class="lb">Bore motor current min / max</span>
+        <input id="i_low_bore" class="inp" type="number" step="0.1"><input id="i_high_bore" class="inp" type="number" step="0.1">
+        <div class="hint">Separate from the well: same starter, but the two motors commonly differ in HP/current rating.</div></div>
       <div class="row"><span class="lb">Frequency min / max</span>
         <input id="f_low" class="inp" type="number" step="0.5"><input id="f_high" class="inp" type="number" step="0.5"></div>
       <div class="row"><span class="lb">Max phase imbalance</span>

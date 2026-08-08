@@ -119,7 +119,7 @@ var Power={
 var Motor={
   pick:'well',
   poll:function(){
-    return Api.get('/api/motor').then(function(d){
+    return Api.get('/api/motor?motor='+Motor.pick).then(function(d){
       UI.el('mState').textContent=d.state;
       var b=UI.el('mBadge');
       b.textContent=d.running?'running':(d.enabled?'idle':'disabled');
@@ -341,6 +341,24 @@ var Zones={
     }
     var sel=UI.el('zn_channel');
     sel.innerHTML=opts||'<option value="">No free channels</option>';
+
+    // Bore routing valves: any existing zone can play either role, so both
+    // selects list the full zone set plus "Not set" (-1).
+    var zoneOpts='<option value="-1">Not set</option>'+d.zones.map(function(z){
+      return '<option value="'+z.id+'">'+Zones.esc(z.name)+'</option>';}).join('');
+    var wt=UI.el('bv_welltank'), fm=UI.el('bv_farm');
+    wt.innerHTML=zoneOpts; fm.innerHTML=zoneOpts;
+    wt.value=String(d.bore_welltank_id);
+    fm.value=String(d.bore_farm_id);
+
+    var rs=UI.el('boreRoutingStatus');
+    if(d.bore_welltank_id<0||d.bore_farm_id<0){
+      rs.textContent='Not configured — the bore-start routing check is skipped.';
+    }else{
+      rs.textContent=d.bore_routing_ok?'Route confirmed — bore may start.'
+                                       :'BLOCKED: '+d.bore_routing_reason;
+      rs.style.color=d.bore_routing_ok?'':'var(--err)';
+    }
   },
   addZone:function(){
     var name=UI.el('zn_name').value.trim();
@@ -383,6 +401,13 @@ var Zones={
     UI.act('/api/zones/cmd',{cmd:'remap',id:id,channel:ch},'Remapped').then(function(){
       Zones.loadManager();
       Zones.load();
+    });
+  },
+  saveBoreValves:function(){
+    var wt=UI.el('bv_welltank').value, fm=UI.el('bv_farm').value;
+    if(wt!=='-1'&&fm!=='-1'&&wt===fm){UI.toast('Well/tank and farm valves must be different zones','err');return;}
+    UI.act('/api/zones/cmd',{cmd:'setborevalves',welltank_id:wt,farm_id:fm},'Bore routing valves saved').then(function(){
+      Zones.loadManager();
     });
   },
   deleteZone:function(id){
@@ -483,7 +508,7 @@ var Zones={
 };
 
 /* ---- Protection ---- */
-var F=['v_low','v_high','i_low','i_high','f_low','f_high','imbalance','inrush_s','dryrun_s'];
+var F=['v_low','v_high','i_low','i_high','i_low_bore','i_high_bore','f_low','f_high','imbalance','inrush_s','dryrun_s'];
 var Protection={
   load:function(){
     Api.get('/api/protection').then(function(d){
@@ -1099,7 +1124,7 @@ function bind(id,fn){var e=UI.el(id);if(e)e.onclick=fn;}
 document.querySelectorAll('.tabs button').forEach(function(b){
   b.onclick=function(){UI.show(b.dataset.p);};});
 document.querySelectorAll('.sel button').forEach(function(b){
-  b.onclick=function(){Motor.pick=b.dataset.m;Motor.paint();};});
+  b.onclick=function(){Motor.pick=b.dataset.m;Motor.paint();Motor.poll();};});
 // Delegated: wifiNets is re-rendered wholesale by Net.load(), so bind once on
 // the (stable) container rather than re-binding after every render.
 UI.el('wifiNets').addEventListener('click',function(e){
@@ -1147,6 +1172,7 @@ bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanne
   if(UI.el('zoneMgrDetails').open)Zones.loadManager();
 });});
 bind('btnZoneAdd',Zones.addZone);
+bind('btnBoreValvesSave',Zones.saveBoreValves);
 UI.el('zoneMgrDetails').addEventListener('toggle',function(){
   if(this.open)Zones.loadManager();
 });

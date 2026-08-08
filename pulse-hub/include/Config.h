@@ -4,7 +4,7 @@
 // =============================================================================
 //                              FIRMWARE VERSION
 // =============================================================================
-#define FW_VERSION "2.14.0"
+#define FW_VERSION "2.15.0"
 
 // Known transmitter firmware version (update here when transmitter is reflashed).
 #define TRANSMITTER_FW_VERSION "2.0.0"
@@ -156,8 +156,17 @@
 // Current needs BOTH limits.  On a centrifugal pump load tracks flow, so a dry
 // run or a closed discharge shows up as LOW current, not high — over-current
 // alone would miss the most common way to destroy the pump.
+//
+// Per motor, not one shared pair: the well and bore motors are commonly
+// different HP/current ratings on the same starter, so a threshold sized for
+// one can either miss a real fault on the other or nuisance-trip it. Voltage
+// and frequency stay shared — both motors are fed by the same incoming
+// 3-phase supply through the changeover, so the supply-side limits are the
+// same either way.
 #define PROT_AMP_LOW_DEFAULT         2.0f
 #define PROT_AMP_HIGH_DEFAULT       10.0f
+#define PROT_AMP_LOW_BORE_DEFAULT    2.0f
+#define PROT_AMP_HIGH_BORE_DEFAULT  10.0f
 
 #define PROT_FREQ_LOW_DEFAULT       47.0f
 #define PROT_FREQ_HIGH_DEFAULT      53.0f
@@ -183,8 +192,10 @@
 #define NVS_PROT_NS             "motor_prot"
 #define NVS_KEY_PROT_VLOW       "v_low"
 #define NVS_KEY_PROT_VHIGH      "v_high"
-#define NVS_KEY_PROT_ILOW       "i_low"
-#define NVS_KEY_PROT_IHIGH      "i_high"
+#define NVS_KEY_PROT_ILOW       "i_low"       // well motor
+#define NVS_KEY_PROT_IHIGH      "i_high"      // well motor
+#define NVS_KEY_PROT_ILOW_BORE  "i_low_b"     // bore motor
+#define NVS_KEY_PROT_IHIGH_BORE "i_high_b"    // bore motor
 #define NVS_KEY_PROT_FLOW       "f_low"
 #define NVS_KEY_PROT_FHIGH      "f_high"
 #define NVS_KEY_PROT_IMBAL      "imbal"

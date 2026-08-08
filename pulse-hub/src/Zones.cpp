@@ -15,6 +15,8 @@
 static ZoneState zones[ZONE_MAX];
 static uint8_t   liveCount = 0;      // zones[0..liveCount-1] are populated (some may be !exists)
 
+static void loadBoreValves();   // defined below, near the bore-routing functions; used by zonesInit()
+
 // Seeded the first time a device ever boots, or migrated from the old
 // fixed-8-zone format — see loadZones(). Channel N = board N/8, local N%8, so
 // channel==index reproduces exactly the original single-board wiring.
@@ -208,6 +210,7 @@ void zonesInit() {
         zones[i].active   = false;
     }
     loadZones();
+    loadBoreValves();
     valveInit();
     zonesRefreshActive();
 
@@ -397,6 +400,70 @@ ZoneReject zoneTestRelay(uint8_t id, uint16_t ms) {
     Log(INFO, "[Zones] " + String(zones[id].name) + " TEST pulse (" + String(ms)
               + "ms, ch " + String(zones[id].channel) + ") - relay only, motor untouched");
     return ZONE_REJ_NONE;
+}
+
+// ---------------------------------------------------------------------------
+//  Bore-motor routing valves — see the declaration in Zones.h for the full
+//  rationale. Two existing zone ids, repurposed; 0xFF on either side means
+//  "not configured yet", and the check is skipped rather than blocking every
+//  bore start before the operator has had a chance to set this up.
+// ---------------------------------------------------------------------------
+#define NVS_KEY_BORE_WELLTANK "bore_wt"
+#define NVS_KEY_BORE_FARM     "bore_fm"
+
+static uint8_t boreWellTankValveId = 0xFF;
+static uint8_t boreFarmValveId     = 0xFF;
+
+static void loadBoreValves() {
+    Preferences p;
+    p.begin(NVS_ZONE_NS, true);
+    boreWellTankValveId = (uint8_t)p.getUChar(NVS_KEY_BORE_WELLTANK, 0xFF);
+    boreFarmValveId     = (uint8_t)p.getUChar(NVS_KEY_BORE_FARM,     0xFF);
+    p.end();
+}
+
+static void saveBoreValves() {
+    Preferences p;
+    p.begin(NVS_ZONE_NS, false);
+    p.putUChar(NVS_KEY_BORE_WELLTANK, boreWellTankValveId);
+    p.putUChar(NVS_KEY_BORE_FARM,     boreFarmValveId);
+    p.end();
+}
+
+void zonesSetBoreValves(uint8_t wellTankZoneId, uint8_t farmZoneId) {
+    boreWellTankValveId = wellTankZoneId;
+    boreFarmValveId     = farmZoneId;
+    saveBoreValves();
+    Log(INFO, "[Zones] Bore routing valves set: well/tank id=" + String(boreWellTankValveId)
+              + " farm id=" + String(boreFarmValveId));
+}
+
+uint8_t zoneBoreWellTankValveId() { return boreWellTankValveId; }
+uint8_t zoneBoreFarmValveId()     { return boreFarmValveId; }
+
+bool zonesBoreRoutingValid(String* reasonOut) {
+    if (boreWellTankValveId == 0xFF || boreFarmValveId == 0xFF) return true;   // not configured - skip
+
+    if (!zoneExists(boreWellTankValveId) || !zoneExists(boreFarmValveId)) {
+        // Configured zone was since deleted. Don't wedge every bore start on a
+        // stale id - log it and let the operator notice and reconfigure.
+        Log(WARN, "[Zones] Bore routing valve configuration references a deleted zone - "
+                  "reconfigure in Zones. Skipping the routing check.");
+        return true;
+    }
+
+    bool wellTankOpen = zones[boreWellTankValveId].open;
+    bool farmOpen     = zones[boreFarmValveId].open;
+
+    if (wellTankOpen == farmOpen) {   // both open, or neither - ambiguous either way
+        if (reasonOut) {
+            *reasonOut = wellTankOpen
+                ? "both bore routing valves are open - route is ambiguous"
+                : "no bore routing valve is open - nowhere for the bore to send water";
+        }
+        return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------

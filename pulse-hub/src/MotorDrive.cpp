@@ -6,6 +6,7 @@
 #include "Logger.h"
 #include "Buzzer.h"
 #include "History.h"
+#include "Zones.h"   // zonesBoreRoutingValid() - Valve_A/Valve_B routing gate for MOTOR_BORE
 
 #include <Preferences.h>
 
@@ -14,6 +15,7 @@ static MotorId  selected      = MOTOR_WELL;
 static MotorId  requested     = MOTOR_WELL;
 static uint8_t  pendingReason = REASON_NONE;
 static ProtTrip lastTrip      = PROT_OK;
+static String   lastRefusalReason;   // non-ProtTrip refusal reason - currently bore routing only
 
 static unsigned long stateSinceMs   = 0;
 static unsigned long runningSinceMs = 0;
@@ -70,8 +72,11 @@ static void clearPulses() {
 
 // Current below the protection floor means "not turning". Without calibration
 // this is unreliable, which is why starts are gated on calibration too.
+// ampLow is now per motor (well vs bore often differ in rating) — `selected`
+// is whichever one the changeover last chose, correct here whether idle,
+// starting or running.
 static bool currentFlowing() {
-    return adeMaxAmps() >= protConfig().ampLow;
+    return adeMaxAmps() >= protConfig().ampLow[selected];
 }
 
 static void beginStop(uint8_t reason) {
@@ -128,6 +133,7 @@ bool motorDriveEnabled()  { return enabled; }
 MotorDriveState motorDriveState() { return state; }
 MotorId motorDriveSelected() { return selected; }
 ProtTrip motorDriveLastTrip() { return lastTrip; }
+const char* motorDriveLastRefusalReason() { return lastRefusalReason.c_str(); }
 bool motorDriveLockedOut() { return lockout; }
 
 bool motorDriveIsRunning() {
@@ -186,6 +192,8 @@ void motorDriveClearFault() {
 }
 
 bool motorDriveRequestStart(MotorId motor, uint8_t reason) {
+    lastRefusalReason = "";
+
     if (!enabled) return false;
 
     if (lockout) {
@@ -219,6 +227,19 @@ bool motorDriveRequestStart(MotorId motor, uint8_t reason) {
     if (gate != PROT_OK) {
         lastTrip = gate;
         return false;
+    }
+
+    // Bore-specific: exactly one of the two routing valves (repurposed zone
+    // relays) must be open, or the bore has nowhere defined to send water.
+    // Checked centrally here rather than in each caller (zones pump
+    // coordination, touch buttons, web, MQTT) - see Zones.h for why.
+    if (motor == MOTOR_BORE) {
+        String reason2;
+        if (!zonesBoreRoutingValid(&reason2)) {
+            lastRefusalReason = reason2;
+            Log(WARN, "[Drive] BORE start refused - " + reason2);
+            return false;
+        }
     }
 
     requested     = motor;

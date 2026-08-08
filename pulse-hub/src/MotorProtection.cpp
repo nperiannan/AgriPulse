@@ -2,6 +2,7 @@
 #include "ADE7758.h"
 #include "Config.h"
 #include "Logger.h"
+#include "MotorDrive.h"   // motorDriveSelected() — which motor's current thresholds apply
 
 #include <Preferences.h>
 
@@ -42,8 +43,10 @@ void protLoadConfig() {
     p.begin(NVS_PROT_NS, true);
     cfg.voltLow             = p.getFloat(NVS_KEY_PROT_VLOW,      PROT_VOLT_LOW_DEFAULT);
     cfg.voltHigh            = p.getFloat(NVS_KEY_PROT_VHIGH,     PROT_VOLT_HIGH_DEFAULT);
-    cfg.ampLow              = p.getFloat(NVS_KEY_PROT_ILOW,      PROT_AMP_LOW_DEFAULT);
-    cfg.ampHigh             = p.getFloat(NVS_KEY_PROT_IHIGH,     PROT_AMP_HIGH_DEFAULT);
+    cfg.ampLow[MOTOR_WELL]  = p.getFloat(NVS_KEY_PROT_ILOW,      PROT_AMP_LOW_DEFAULT);
+    cfg.ampHigh[MOTOR_WELL] = p.getFloat(NVS_KEY_PROT_IHIGH,     PROT_AMP_HIGH_DEFAULT);
+    cfg.ampLow[MOTOR_BORE]  = p.getFloat(NVS_KEY_PROT_ILOW_BORE, PROT_AMP_LOW_BORE_DEFAULT);
+    cfg.ampHigh[MOTOR_BORE] = p.getFloat(NVS_KEY_PROT_IHIGH_BORE,PROT_AMP_HIGH_BORE_DEFAULT);
     cfg.freqLow             = p.getFloat(NVS_KEY_PROT_FLOW,      PROT_FREQ_LOW_DEFAULT);
     cfg.freqHigh            = p.getFloat(NVS_KEY_PROT_FHIGH,     PROT_FREQ_HIGH_DEFAULT);
     cfg.imbalanceMax        = p.getFloat(NVS_KEY_PROT_IMBAL,     PROT_IMBALANCE_MAX_DEFAULT);
@@ -61,8 +64,10 @@ void protSaveConfig() {
     p.begin(NVS_PROT_NS, false);
     p.putFloat(NVS_KEY_PROT_VLOW,      cfg.voltLow);
     p.putFloat(NVS_KEY_PROT_VHIGH,     cfg.voltHigh);
-    p.putFloat(NVS_KEY_PROT_ILOW,      cfg.ampLow);
-    p.putFloat(NVS_KEY_PROT_IHIGH,     cfg.ampHigh);
+    p.putFloat(NVS_KEY_PROT_ILOW,      cfg.ampLow[MOTOR_WELL]);
+    p.putFloat(NVS_KEY_PROT_IHIGH,     cfg.ampHigh[MOTOR_WELL]);
+    p.putFloat(NVS_KEY_PROT_ILOW_BORE, cfg.ampLow[MOTOR_BORE]);
+    p.putFloat(NVS_KEY_PROT_IHIGH_BORE,cfg.ampHigh[MOTOR_BORE]);
     p.putFloat(NVS_KEY_PROT_FLOW,      cfg.freqLow);
     p.putFloat(NVS_KEY_PROT_FHIGH,     cfg.freqHigh);
     p.putFloat(NVS_KEY_PROT_IMBAL,     cfg.imbalanceMax);
@@ -146,9 +151,13 @@ static ProtTrip evaluateRunningRaw(unsigned long runningMs) {
 
     if (!protCurrentTripsArmed()) return PROT_OK;
 
+    // Whichever motor the changeover is currently feeding — well and bore
+    // commonly have different current ratings on the same starter.
+    MotorId m = motorDriveSelected();
+
     // Over-current only after inrush has passed.
     if (runningMs >= cfg.inrushBlankMs) {
-        if (adeMaxAmps() > cfg.ampHigh) return PROT_OVER_CURRENT;
+        if (adeMaxAmps() > cfg.ampHigh[m]) return PROT_OVER_CURRENT;
 
         float imb = adeCurrentImbalance();
         if (imb > cfg.imbalanceMax) return PROT_IMBALANCE;
@@ -157,7 +166,7 @@ static ProtTrip evaluateRunningRaw(unsigned long runningMs) {
     // Under-current needs the longer window: flow takes time to establish and a
     // healthy start looks exactly like a dry run until it does.
     if (runningMs >= cfg.dryRunBlankMs) {
-        if (adeMaxAmps() < cfg.ampLow) return PROT_UNDER_CURRENT;
+        if (adeMaxAmps() < cfg.ampLow[m]) return PROT_UNDER_CURRENT;
     }
 
     return PROT_OK;
@@ -197,7 +206,7 @@ ProtTrip protEvaluateRunning(unsigned long runningMs) {
 ProtTrip protCheckStartConfirm(unsigned long msSincePulse) {
     if (!protCurrentTripsArmed()) return PROT_OK;   // can't judge without scaling
 
-    if (adeMaxAmps() > cfg.ampLow) return PROT_OK;  // current flowing: started
+    if (adeMaxAmps() > cfg.ampLow[motorDriveSelected()]) return PROT_OK;  // current flowing: started
 
     if (msSincePulse >= cfg.startConfirmMs) {
         Log(ERROR, "[Prot] START pulsed but no current - starter tripped, "
@@ -210,7 +219,7 @@ ProtTrip protCheckStartConfirm(unsigned long msSincePulse) {
 ProtTrip protCheckStopConfirm(unsigned long msSincePulse) {
     if (!protCurrentTripsArmed()) return PROT_OK;
 
-    if (adeMaxAmps() < cfg.ampLow) return PROT_OK;  // current gone: stopped
+    if (adeMaxAmps() < cfg.ampLow[motorDriveSelected()]) return PROT_OK;  // current gone: stopped
 
     if (msSincePulse >= cfg.stopConfirmMs) {
         Log(ERROR, "[Prot] STOP pulsed but current persists - CONTACTOR MAY BE "

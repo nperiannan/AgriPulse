@@ -141,6 +141,34 @@ void zonesStopAll(ZoneStopCause cause);
 // test must never cross into a live irrigation cycle.
 ZoneReject zoneTestRelay(uint8_t id, uint16_t ms);
 
+// ---------------------------------------------------------------------------
+//  Bore-motor routing valves
+//
+//  Two of the existing zone relays, repurposed — not new hardware — as the
+//  bore motor's routing valves: one feeds the well/tank line, the other the
+//  farm line. The fixed rule (not user-editable, matches the physical
+//  plumbing): exactly one of the two must be open whenever BORE is about to
+//  start. Both open, or neither open while something wants BORE, refuses the
+//  start rather than guessing which way the water should actually go.
+//
+//  Enforced once, centrally, inside motorDriveRequestStart() itself (see
+//  MotorDrive.cpp) — not in Zones.cpp's callers — because bore can be
+//  requested from several independent places (zones pump-coordination, the
+//  touch buttons, the web Control tab, MQTT) and a check placed in only one
+//  of them would be silently bypassable from the others.
+// ---------------------------------------------------------------------------
+
+// 0xFF = unconfigured on either side — the whole check is skipped rather than
+// blocking every bore start just because it hasn't been set up yet.
+void    zonesSetBoreValves(uint8_t wellTankZoneId, uint8_t farmZoneId);
+uint8_t zoneBoreWellTankValveId();
+uint8_t zoneBoreFarmValveId();
+
+// True if BORE may start right now. reasonOut, if non-null, is set to a
+// human-readable explanation when it returns false — surfaced to the UI so a
+// refused start says why instead of just not happening.
+bool zonesBoreRoutingValid(String* reasonOut);
+
 // zoneCount()/zoneExists() — iterate 0..zoneCount()-1, skip !zoneExists(i) for
 // anything user-facing (a tombstoned id can never be open, so the interlock
 // loops in Zones.cpp don't need the exists check — they already gate on .open).

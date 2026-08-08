@@ -38,6 +38,14 @@ static void getZones() {
     doc["stop_reason"]      = zoneStopCauseName(zoneLastStopCause());
     doc["stop_zone"]        = zoneLastStopZoneName();
 
+    // Bore-motor routing valves: two existing zone relays repurposed as
+    // Valve_A (well/tank) and Valve_B (farm) — see Zones.h. -1 = unconfigured.
+    doc["bore_welltank_id"] = zoneBoreWellTankValveId() == 0xFF ? -1 : (int)zoneBoreWellTankValveId();
+    doc["bore_farm_id"]     = zoneBoreFarmValveId()     == 0xFF ? -1 : (int)zoneBoreFarmValveId();
+    String boreReason;
+    doc["bore_routing_ok"]     = zonesBoreRoutingValid(&boreReason);
+    doc["bore_routing_reason"] = boreReason;
+
     // Board slots, for the zone-creation/remap channel picker — each
     // contributes channels [b*8 .. b*8+7]. Slot index is stable (declared
     // order), not scan order — "Expansion Board #(b+1)" in the UI is
@@ -113,6 +121,21 @@ static void postZoneCmd() {
         uint8_t id = zoneCreate(apiServer.arg("name"), kind, (uint8_t)ch);
         if (id == 0xFF) { apiSendError("zone limit reached, name empty, or channel already in use"); return; }
         apiSendJson(200, "{\"ok\":true,\"id\":" + String(id) + "}");
+        return;
+    }
+
+    if (cmd == "setborevalves") {
+        // -1 (or omitted) = unconfigured on that side. Args are named after
+        // the physical destination, not "a/b" — see Zones.h.
+        int wt = apiServer.hasArg("welltank_id") ? apiServer.arg("welltank_id").toInt() : -1;
+        int fm = apiServer.hasArg("farm_id")     ? apiServer.arg("farm_id").toInt()     : -1;
+        if (wt >= 0 && !zoneExists((uint8_t)wt)) { apiSendError("no such well/tank zone"); return; }
+        if (fm >= 0 && !zoneExists((uint8_t)fm)) { apiSendError("no such farm zone"); return; }
+        if (wt >= 0 && fm >= 0 && wt == fm) {
+            apiSendError("well/tank and farm valves must be two different zones"); return;
+        }
+        zonesSetBoreValves(wt < 0 ? 0xFF : (uint8_t)wt, fm < 0 ? 0xFF : (uint8_t)fm);
+        apiSendOk();
         return;
     }
 

@@ -30,9 +30,13 @@ enum ProtTrip : uint8_t {
 };
 
 struct ProtConfig {
-    float voltLow, voltHigh;
-    float ampLow, ampHigh;
-    float freqLow, freqHigh;
+    float voltLow, voltHigh;      // shared — same incoming supply feeds either motor
+    // Per motor (index by MotorId — 0=well, 1=bore — see MotorDrive.h). Current
+    // draw is a property of the specific motor's load, not the shared supply,
+    // so unlike voltage/frequency this genuinely needs two sets: a well and a
+    // bore motor commonly differ in HP/current rating on the same starter.
+    float ampLow[2], ampHigh[2];
+    float freqLow, freqHigh;      // shared
     float imbalanceMax;
     unsigned long inrushBlankMs;
     unsigned long dryRunBlankMs;

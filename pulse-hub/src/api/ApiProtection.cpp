@@ -1,5 +1,6 @@
 #include "ApiCommon.h"
 #include "MotorProtection.h"
+#include "MotorDrive.h"   // MOTOR_WELL/MOTOR_BORE indices into the per-motor current arrays
 #include "ADE7758.h"
 #include "Logger.h"
 
@@ -15,8 +16,10 @@ static void getProtection() {
     StaticJsonDocument<512> doc;
     doc["v_low"]      = c.voltLow;
     doc["v_high"]     = c.voltHigh;
-    doc["i_low"]      = c.ampLow;
-    doc["i_high"]     = c.ampHigh;
+    doc["i_low"]      = c.ampLow[MOTOR_WELL];
+    doc["i_high"]     = c.ampHigh[MOTOR_WELL];
+    doc["i_low_bore"]  = c.ampLow[MOTOR_BORE];
+    doc["i_high_bore"] = c.ampHigh[MOTOR_BORE];
     doc["f_low"]      = c.freqLow;
     doc["f_high"]     = c.freqHigh;
     doc["imbalance"]  = c.imbalanceMax;
@@ -36,8 +39,10 @@ static void postProtection() {
     ProtConfig& c = protConfig();
     if (apiServer.hasArg("v_low"))     c.voltLow       = apiServer.arg("v_low").toFloat();
     if (apiServer.hasArg("v_high"))    c.voltHigh      = apiServer.arg("v_high").toFloat();
-    if (apiServer.hasArg("i_low"))     c.ampLow        = apiServer.arg("i_low").toFloat();
-    if (apiServer.hasArg("i_high"))    c.ampHigh       = apiServer.arg("i_high").toFloat();
+    if (apiServer.hasArg("i_low"))     c.ampLow[MOTOR_WELL]  = apiServer.arg("i_low").toFloat();
+    if (apiServer.hasArg("i_high"))    c.ampHigh[MOTOR_WELL] = apiServer.arg("i_high").toFloat();
+    if (apiServer.hasArg("i_low_bore"))  c.ampLow[MOTOR_BORE]  = apiServer.arg("i_low_bore").toFloat();
+    if (apiServer.hasArg("i_high_bore")) c.ampHigh[MOTOR_BORE] = apiServer.arg("i_high_bore").toFloat();
     if (apiServer.hasArg("f_low"))     c.freqLow       = apiServer.arg("f_low").toFloat();
     if (apiServer.hasArg("f_high"))    c.freqHigh      = apiServer.arg("f_high").toFloat();
     if (apiServer.hasArg("imbalance")) c.imbalanceMax  = apiServer.arg("imbalance").toFloat();
@@ -45,7 +50,12 @@ static void postProtection() {
     if (apiServer.hasArg("dryrun_s"))  c.dryRunBlankMs = apiServer.arg("dryrun_s").toInt() * 1000UL;
 
     if (c.voltLow >= c.voltHigh) { apiSendError("voltage minimum must be below maximum"); return; }
-    if (c.ampLow  >= c.ampHigh)  { apiSendError("current minimum must be below maximum"); return; }
+    if (c.ampLow[MOTOR_WELL] >= c.ampHigh[MOTOR_WELL]) {
+        apiSendError("well motor current minimum must be below maximum"); return;
+    }
+    if (c.ampLow[MOTOR_BORE] >= c.ampHigh[MOTOR_BORE]) {
+        apiSendError("bore motor current minimum must be below maximum"); return;
+    }
 
     protSaveConfig();
     Log(INFO, "[Web] Protection thresholds updated");

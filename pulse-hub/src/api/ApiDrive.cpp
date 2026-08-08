@@ -3,6 +3,7 @@
 #include "MotorProtection.h"
 #include "ADE7758.h"
 #include "History.h"
+#include "Zones.h"   // zonesBoreRoutingValid() - bore-only precondition check
 
 #include <ArduinoJson.h>
 
@@ -50,9 +51,23 @@ static void getMotor() {
     add("Not locked out", !motorDriveLockedOut(),
         motorDriveLockedOut() ? "maintenance lockout engaged" : "clear");
 
+    // Bore-only: which of the two routing valves (repurposed zone relays) is
+    // open decides whether the bore has anywhere to send water. Meaningless
+    // for the well (it has no diverter), so only shown when bore is the motor
+    // currently selected in the UI - see the ?motor= query arg below.
+    bool wantBoreCheck = apiServer.arg("motor") == "bore";
+    String boreReason;
+    bool boreOk = zonesBoreRoutingValid(&boreReason);
+    if (wantBoreCheck) {
+        add("Bore routing valve", boreOk,
+            boreOk ? (zoneBoreWellTankValveId() == 0xFF ? "not configured - see Zones"
+                                                          : "route confirmed") : boreReason);
+    }
+
     doc["supply"]    = protTripName(supply);
     doc["can_start"] = supply == PROT_OK && !motorDriveLockedOut() && motorDriveEnabled()
-                       && protCurrentTripsArmed() && motorDriveState() == MDRV_IDLE;
+                       && protCurrentTripsArmed() && motorDriveState() == MDRV_IDLE
+                       && (!wantBoreCheck || boreOk);
 
     String out;
     serializeJson(doc, out);
@@ -65,7 +80,8 @@ static void postMotorCmd() {
     if (cmd == "start") {
         MotorId m = (apiServer.arg("motor") == "bore") ? MOTOR_BORE : MOTOR_WELL;
         if (!motorDriveRequestStart(m, REASON_MANUAL_WEB)) {
-            apiSendError("start refused - see the precondition list");
+            String why = motorDriveLastRefusalReason();
+            apiSendError(why.length() ? why.c_str() : "start refused - see the precondition list");
             return;
         }
     } else if (cmd == "stop") {

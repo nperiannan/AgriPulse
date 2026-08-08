@@ -72,6 +72,11 @@ MotorId motorDriveSelected();
 ProtTrip motorDriveLastTrip();
 unsigned long motorDriveRunningMs();
 
+// Set when a start was refused for a reason that isn't a ProtTrip - currently
+// only the bore routing-valve gate (see Zones.h). Empty string otherwise.
+// Cleared at the start of every motorDriveRequestStart() call.
+const char* motorDriveLastRefusalReason();
+
 // Maintenance lockout: persisted, survives reboot, blocks every start
 // including automatic resume after a power cut.
 void motorDriveSetLockout(bool on);
