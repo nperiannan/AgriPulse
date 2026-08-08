@@ -89,7 +89,7 @@ var Power={
           // is simply unlit, dim grey, no glow - a different fact.
           var oor=p.present&&(p.volts<d.v_low||p.volts>d.v_high);
           var lampCls='bulb sm'+(p.present?(oor?' live err':' live '+Power.cls[i]):'');
-          h+='<div class="lampCard"><div class="'+lampCls+'">'+(p.present?UI.fmt(p.volts,0):'--')+'</div>'
+          h+='<div class="lampCard"><div class="'+lampCls+'">'+(p.present?UI.fmt(p.volts,0)+'V':'--')+'</div>'
             +'<div class="pl">'+FieldMap.esc(p.name)+'</div>'
             +'<div class="miniStats"><span><b>'+UI.fmt(p.amps,2)+'</b> A</span><span><b>'+UI.fmt(p.hz,1)+'</b> Hz</span></div>'
             +'</div>';
@@ -157,7 +157,16 @@ var Motor={
       else if(d.state_id===11||d.state_id===12) lc='err';
       else if(d.running) lc='ok';
       lamp.className='bulb md'+(lc!=='off'?' live '+lc:'');
-      lamp.textContent=Motor.pick==='bore'?'BORE':'WELL';
+      // Real bug, found live: this used to always show Motor.pick (the
+      // operator's PENDING choice for the next start) even while a start was
+      // already committed or running - so clicking "Bore Motor" while WELL
+      // was actually running relabeled the green "it's running" lamp as
+      // BORE, though WELL was still the one physically turning. From
+      // PRE_START onward d.selected is the physical truth (see
+      // motorDriveSelected()); only IDLE/DISABLED/LOCKED_OUT have nothing
+      // committed yet, so only then does the pending pick make sense to show.
+      var committed=d.state_id!==0&&d.state_id!==1&&d.state_id!==2;
+      lamp.textContent=(committed?d.selected:Motor.pick)==='bore'?'BORE':'WELL';
       UI.el('mRun').textContent=d.run_s>0?('running for '+d.run_s+' s')
         :'One starter feeds both through the changeover, so only one runs at a time.';
       Motor.paint();
@@ -320,6 +329,22 @@ var FieldMap={
       s+=wb.circle;
       s+='<text x="'+(valveBoxX+valveBoxW/2+vR+9)+'" y="'+(branchY-2)+'" font-size="10" font-weight="700" fill="var(--tx)">'+FieldMap.esc(wtZone.name)+'</text>';
       s+='<text x="'+(valveBoxX+valveBoxW/2+vR+9)+'" y="'+(branchY+11)+'" font-size="8.5" fill="var(--tx2)">to well/tank &middot; '+(wtZone.open?'open':'closed')+'</text>';
+
+      // Real gap, flagged live: this valve used to just dead-end at its own
+      // icon with a "to well/tank" label and no drawn destination - visually
+      // indistinguishable from a valve that goes nowhere. It physically sends
+      // bore water back to refill the well/tank, not out to the farm trunk,
+      // so it gets its own return path back to the WELL node instead of
+      // merging into the same pipe the zones draw from. Routed left of the
+      // motor circles (x=returnX, clear of BORE's circle at leftX) and dashed
+      // to read as "return", distinct from the solid supply trunk.
+      var returnX=leftX-r-10;
+      s+='<path d="M'+(valveBoxX+valveBoxW/2)+' '+(branchY+vR)
+        +' L'+(valveBoxX+valveBoxW/2)+' '+(branchY+vR+10)
+        +' L'+returnX+' '+(branchY+vR+10)
+        +' L'+returnX+' '+wellY
+        +' L'+(leftX-r)+' '+wellY+'" fill="none" stroke="'+wb.col+'" stroke-width="2.5" stroke-dasharray="4 4"'
+        +(wellTankFlowing?' class="flowline"':'')+'/>';
     } else {
       // Not configured yet: bore just merges straight into the trunk like
       // WELL does — see fmBoreNote in the HTML for the explanation. Same
