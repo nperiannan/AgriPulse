@@ -45,7 +45,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   </div>
 
   <div id="p-ctl" class="pane on">
-   <div class="grid">
+   <div class="grid g2">
     <div class="card">
       <div class="card-hd"><span class="ct">Supply</span><span id="threshBadge" class="badge b-off">--</span></div>
       <div class="lampRow" id="phaseLamps"></div>

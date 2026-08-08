@@ -37,6 +37,14 @@ body{margin:0;background:var(--bg);color:var(--tx);
 .hdr-r{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--tx2)}
 .wrap{padding:13px;max-width:1080px;margin:0 auto}
 .grid{display:grid;gap:13px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+/* Dashboard: exactly 2 columns for Supply/Motor, not auto-fit's dynamic
+   count. With only 2 real cards in that row, auto-fit was creating extra
+   empty implicit column tracks on a wide screen - Supply/Motor looked
+   squeezed into the left portion of the row while .card.full items below
+   (which span every track, empty ones included) stretched the true full
+   width, making the row above look narrower than it actually needed to be. */
+.grid.g2{grid-template-columns:1fr 1fr}
+@media (max-width:640px){.grid.g2{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:13px}
 .card.full{grid-column:1/-1}
 .ct{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2);margin:0 0 9px}
@@ -84,7 +92,12 @@ body{margin:0;background:var(--bg);color:var(--tx);
    etc. above already accept one fixed tint rather than one per theme. ---- */
 .bulb{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;
   font-variant-numeric:tabular-nums;background:var(--card2);color:var(--tx2);border:2.5px solid var(--bd2);
-  transition:background .2s,border-color .2s,box-shadow .2s}
+  transition:background .2s,border-color .2s,box-shadow .2s;
+  /* Fixed-size badge, never a flex child that shrinks to fit its siblings -
+     without this, .motorLamp's flex row squeezes the bulb's WIDTH down to
+     fit the long state text beside it while its fixed height stays put,
+     turning the circle into an egg. */
+  flex-shrink:0}
 .bulb.sm{width:52px;height:52px;font-size:12px}
 .bulb.md{width:72px;height:72px;font-size:14px}
 .bulb.live.r{background:var(--ph-r);border-color:var(--ph-r);color:#fff;

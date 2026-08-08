@@ -250,15 +250,18 @@ var FieldMap={
     var s='<svg viewBox="0 0 '+svgW+' '+svgH+'" width="100%" height="'+svgH
       +'" role="img" aria-label="Field layout: well and bore motors, routing valves, and zones">';
 
-    // WELL — no valve of its own, feeds the farm trunk directly.
-    s+='<circle cx="'+leftX+'" cy="'+wellY+'" r="'+r+'" fill="'+(runWell?'var(--ok)':'var(--card2)')+'" stroke="'+wellColor+'" stroke-width="2.5"/>';
-    s+='<text x="'+leftX+'" y="'+(wellY+3)+'" text-anchor="middle" font-size="9" font-weight="800" fill="'+(runWell?'#fff':'var(--tx2)')+'">WELL</text>';
+    // WELL — no valve of its own, feeds the farm trunk directly. Filled
+    // whenever "live" (selected, whether standby-amber or running-green) -
+    // matches the Motor card's bulb, which fills the same way; outline-only
+    // for selected-but-idle was a real inconsistency between the two.
+    s+='<circle cx="'+leftX+'" cy="'+wellY+'" r="'+r+'" fill="'+(selWell?wellColor:'var(--card2)')+'" stroke="'+wellColor+'" stroke-width="2.5"/>';
+    s+='<text x="'+leftX+'" y="'+(wellY+3)+'" text-anchor="middle" font-size="9" font-weight="800" fill="'+(selWell?'#fff':'var(--tx2)')+'">WELL</text>';
     s+='<line x1="'+(leftX+r)+'" y1="'+wellY+'" x2="'+trunkX+'" y2="'+wellY+'" stroke="'+wellColor+'" stroke-width="3"'
       +(runWell?' class="flowline"':'')+'/>';
 
     // BORE — up to two routing valves.
-    s+='<circle cx="'+leftX+'" cy="'+boreY+'" r="'+r+'" fill="'+(runBore?'var(--ok)':'var(--card2)')+'" stroke="'+boreColor+'" stroke-width="2.5"/>';
-    s+='<text x="'+leftX+'" y="'+(boreY+3)+'" text-anchor="middle" font-size="9" font-weight="800" fill="'+(runBore?'#fff':'var(--tx2)')+'">BORE</text>';
+    s+='<circle cx="'+leftX+'" cy="'+boreY+'" r="'+r+'" fill="'+(selBore?boreColor:'var(--card2)')+'" stroke="'+boreColor+'" stroke-width="2.5"/>';
+    s+='<text x="'+leftX+'" y="'+(boreY+3)+'" text-anchor="middle" font-size="9" font-weight="800" fill="'+(selBore?'#fff':'var(--tx2)')+'">BORE</text>';
 
     // Does the farm trunk actually have an active supply right now, and if
     // so at which y? At most one motor ever runs (changeover), so at most
