@@ -142,6 +142,14 @@ var Motor={
       else if(d.last_trip&&d.last_trip!=='ok'){fb.style.display='block';
         fb.textContent='Last trip: '+d.last_trip;}
       else fb.style.display='none';
+      var bb=UI.el('bypassBanner');
+      if(d.bypass_running){bb.style.display='block';
+        bb.textContent='MAINTENANCE OVERRIDE ACTIVE — ALL running protection is silenced '+
+          '(no dry-run, overload, or phase-loss stop). Remove in Protection when done testing.';}
+      else if(d.bypass_prestart){bb.style.display='block';
+        bb.textContent='MAINTENANCE OVERRIDE ACTIVE — START ignores a failed voltage/current '+
+          'reading. Remove in Protection when done testing.';}
+      else bb.style.display='none';
     }).catch(function(){});
   },
   paint:function(){
@@ -516,10 +524,24 @@ var Protection={
       UI.el('cal_v_a').value=d.cal_v_a;UI.el('cal_v_b').value=d.cal_v_b;
       UI.el('cal_v_c').value=d.cal_v_c;UI.el('cal_i').value=d.cal_i;
       UI.el('calFlag').value=d.calibrated?'1':'0';
+      UI.el('bypass_prestart').checked=!!d.bypass_prestart;
+      UI.el('bypass_running').checked=!!d.bypass_running;
     }).catch(function(){});
   },
   save:function(){var o={};F.forEach(function(k){o[k]=UI.el(k).value;});
     UI.act('/api/protection',o,'Thresholds saved');},
+  // Separate button/request from the threshold Save above — these are a
+  // distinct, higher-consequence action and shouldn't ride along silently
+  // whenever someone tweaks an unrelated threshold field.
+  saveBypass:function(){
+    var pre=UI.el('bypass_prestart').checked, run=UI.el('bypass_running').checked;
+    if((pre||run)&&!window.confirm(
+      (run?'This will silence ALL motor protection while running — nothing will stop it '+
+           'on dry run, overload or phase loss.':'This will let the motor START despite a failed '+
+           'voltage/current/phase reading.')+'\n\nOnly for a supervised bench test. Continue?'))return;
+    UI.act('/api/protection',{bypass_prestart:pre?'1':'0',bypass_running:run?'1':'0'},
+      'Overrides saved').then(Motor.poll);
+  },
   saveCal:function(){
     UI.act('/api/calibration',{v_a:UI.el('cal_v_a').value,v_b:UI.el('cal_v_b').value,
       v_c:UI.el('cal_v_c').value,i:UI.el('cal_i').value,calibrated:UI.el('calFlag').value},
@@ -1140,6 +1162,7 @@ bind('btnLock', function(){
 bind('btnEnable',function(){
   Motor.cmd('enable',{on:UI.el('btnEnable').textContent.indexOf('Enabled')===0?'0':'1'});});
 bind('btnSaveProt',Protection.save);
+bind('btnSaveBypass',Protection.saveBypass);
 bind('btnSaveCal',Protection.saveCal);
 bind('btnQcVR',function(){Protection.quickCal('qc_v_r','qc_live_v_r','v_a');});
 bind('btnQcVY',function(){Protection.quickCal('qc_v_y','qc_live_v_y','v_b');});

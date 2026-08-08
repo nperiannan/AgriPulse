@@ -225,8 +225,12 @@ bool motorDriveRequestStart(MotorId motor, uint8_t reason) {
 
     ProtTrip gate = protCheckStartAllowed();
     if (gate != PROT_OK) {
-        lastTrip = gate;
-        return false;
+        if (protConfig().bypassPreStart) {
+            Log(WARN, String("[Drive] MAINTENANCE OVERRIDE - starting despite ") + protTripName(gate));
+        } else {
+            lastTrip = gate;
+            return false;
+        }
     }
 
     // Bore-specific: exactly one of the two routing valves (repurposed zone

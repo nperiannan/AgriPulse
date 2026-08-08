@@ -4,7 +4,7 @@
 // =============================================================================
 //                              FIRMWARE VERSION
 // =============================================================================
-#define FW_VERSION "2.15.0"
+#define FW_VERSION "2.16.0"
 
 // Known transmitter firmware version (update here when transmitter is reflashed).
 #define TRANSMITTER_FW_VERSION "2.0.0"
@@ -205,6 +205,14 @@
 #define NVS_KEY_PROT_STARTCONF  "conf_on"
 #define NVS_KEY_PROT_STOPCONF   "conf_off"
 #define NVS_KEY_PROT_ARM_UNCAL  "arm_uncal"
+
+// Temporary maintenance overrides — see ProtConfig.bypassPreStart/bypassRunning
+// in MotorProtection.h. Requested 2026-08-08 to get past a supply fault that
+// was blocking every start on the bench; intended to be removed later, not a
+// permanent feature — persisted anyway so it survives a reboot mid-session,
+// but defaults false and is loud in the UI whenever either is on.
+#define NVS_KEY_PROT_BYPASS_PRESTART "byp_pre"
+#define NVS_KEY_PROT_BYPASS_RUNNING  "byp_run"
 
 // =============================================================================
 //                    MOTOR DRIVE  (two-wire latching starter)

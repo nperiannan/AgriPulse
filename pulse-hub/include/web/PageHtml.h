@@ -30,6 +30,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
 <div class="wrap">
   <div id="calBanner" class="banner bn-warn"></div>
   <div id="faultBanner" class="banner bn-err"></div>
+  <div id="bypassBanner" class="banner bn-err" style="display:none"></div>
 
   <div class="tabs">
     <button class="on" data-p="p-ctl">Control</button>
@@ -181,6 +182,21 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <input id="dryrun_s" class="inp" type="number" step="1">
         <div class="hint">Longer: a healthy start looks like a dry run until flow establishes.</div></div>
       <div class="brow"><button class="btn" id="btnSaveProt">Save thresholds</button></div>
+    </div>
+
+    <div class="card" style="border-color:var(--err)">
+      <div class="ct" style="color:var(--err)">Maintenance Overrides &mdash; Temporary</div>
+      <div class="hint" style="margin-bottom:9px">
+        For getting past a known-bad reading while testing. Not a normal operating mode &mdash;
+        remove both when you're done. Never bypasses the STOP-failed / welded-contactor check.
+      </div>
+      <div class="row"><span class="lb">Bypass pre-start voltage/current check</span>
+        <input id="bypass_prestart" type="checkbox">
+        <div class="hint">Lets START proceed despite a failed voltage/phase/frequency/meter reading. Protection while running stays on unless the option below is also checked.</div></div>
+      <div class="row"><span class="lb">Also bypass protection while running</span>
+        <input id="bypass_running" type="checkbox">
+        <div class="hint">Nothing will stop the motor once it's running &mdash; no dry-run stop, no overload stop, no phase-loss stop. Only for a supervised bench test.</div></div>
+      <div class="brow"><button class="btn" id="btnSaveBypass" style="background:var(--err)">Save overrides</button></div>
     </div>
 
     <div class="card">

@@ -56,7 +56,16 @@ void protLoadConfig() {
     cfg.startConfirmMs      = p.getULong(NVS_KEY_PROT_STARTCONF, PROT_START_CONFIRM_MS_DEFAULT);
     cfg.stopConfirmMs       = p.getULong(NVS_KEY_PROT_STOPCONF,  PROT_STOP_CONFIRM_MS_DEFAULT);
     cfg.armWhenUncalibrated = p.getBool (NVS_KEY_PROT_ARM_UNCAL, false);
+    cfg.bypassPreStart      = p.getBool (NVS_KEY_PROT_BYPASS_PRESTART, false);
+    cfg.bypassRunning       = p.getBool (NVS_KEY_PROT_BYPASS_RUNNING,  false);
     p.end();
+
+    if (cfg.bypassPreStart || cfg.bypassRunning) {
+        Log(WARN, String("[Prot] MAINTENANCE OVERRIDE active on boot - pre-start:")
+                  + (cfg.bypassPreStart ? "BYPASSED" : "normal") + " running:"
+                  + (cfg.bypassRunning ? "BYPASSED" : "normal")
+                  + " - remove from the Protection tab when done testing");
+    }
 }
 
 void protSaveConfig() {
@@ -77,6 +86,8 @@ void protSaveConfig() {
     p.putULong(NVS_KEY_PROT_STARTCONF, cfg.startConfirmMs);
     p.putULong(NVS_KEY_PROT_STOPCONF,  cfg.stopConfirmMs);
     p.putBool (NVS_KEY_PROT_ARM_UNCAL, cfg.armWhenUncalibrated);
+    p.putBool (NVS_KEY_PROT_BYPASS_PRESTART, cfg.bypassPreStart);
+    p.putBool (NVS_KEY_PROT_BYPASS_RUNNING,  cfg.bypassRunning);
     p.end();
 }
 
@@ -172,8 +183,25 @@ static ProtTrip evaluateRunningRaw(unsigned long runningMs) {
     return PROT_OK;
 }
 
+// Edge-triggered logging for the running bypass below — evaluateRunningRaw()
+// is polled every loop() tick, so logging every call while a fault is being
+// suppressed would flood the log. Only logs on each NEW would-have-tripped
+// condition, same idea as pendingTrip's debounce just below.
+static ProtTrip lastSuppressed = PROT_OK;
+
 ProtTrip protEvaluateRunning(unsigned long runningMs) {
     ProtTrip t = evaluateRunningRaw(runningMs);
+
+    if (cfg.bypassRunning) {
+        if (t != lastSuppressed) {
+            lastSuppressed = t;
+            if (t != PROT_OK) {
+                Log(WARN, String("[Prot] MAINTENANCE OVERRIDE - suppressing: ") + protTripName(t));
+            }
+        }
+        pendingTrip = PROT_OK;
+        return PROT_OK;
+    }
 
     // Phase loss is not debounced — single-phasing burns windings in minutes.
     if (t == PROT_PHASE_MISSING) {

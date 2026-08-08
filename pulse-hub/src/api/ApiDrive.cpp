@@ -25,6 +25,8 @@ static void getMotor() {
     doc["run_s"]     = motorDriveRunningMs() / 1000UL;
     doc["last_trip"] = protTripName(motorDriveLastTrip());
     doc["armed"]     = protCurrentTripsArmed();
+    doc["bypass_prestart"] = protConfig().bypassPreStart;
+    doc["bypass_running"]  = protConfig().bypassRunning;
 
     ProtTrip supply = protSupplyStatus();
     const AdeReadings& r = adeGetReadings();
@@ -65,7 +67,8 @@ static void getMotor() {
     }
 
     doc["supply"]    = protTripName(supply);
-    doc["can_start"] = supply == PROT_OK && !motorDriveLockedOut() && motorDriveEnabled()
+    doc["can_start"] = (supply == PROT_OK || protConfig().bypassPreStart)
+                       && !motorDriveLockedOut() && motorDriveEnabled()
                        && protCurrentTripsArmed() && motorDriveState() == MDRV_IDLE
                        && (!wantBoreCheck || boreOk);
 

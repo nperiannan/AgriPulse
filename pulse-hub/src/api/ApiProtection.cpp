@@ -13,7 +13,7 @@
 static void getProtection() {
     ProtConfig& c = protConfig();
     AdeCalibration& cal = adeCalibration();
-    StaticJsonDocument<512> doc;
+    StaticJsonDocument<768> doc;   // headroom - ArduinoJson silently drops fields past capacity
     doc["v_low"]      = c.voltLow;
     doc["v_high"]     = c.voltHigh;
     doc["i_low"]      = c.ampLow[MOTOR_WELL];
@@ -30,6 +30,8 @@ static void getProtection() {
     doc["cal_v_c"]    = cal.voltScale[2];
     doc["cal_i"]      = cal.ampScale[0];
     doc["calibrated"] = cal.calibrated;
+    doc["bypass_prestart"] = c.bypassPreStart;
+    doc["bypass_running"]  = c.bypassRunning;
     String out;
     serializeJson(doc, out);
     apiSendJson(200, out);
@@ -48,6 +50,25 @@ static void postProtection() {
     if (apiServer.hasArg("imbalance")) c.imbalanceMax  = apiServer.arg("imbalance").toFloat();
     if (apiServer.hasArg("inrush_s"))  c.inrushBlankMs = apiServer.arg("inrush_s").toInt() * 1000UL;
     if (apiServer.hasArg("dryrun_s"))  c.dryRunBlankMs = apiServer.arg("dryrun_s").toInt() * 1000UL;
+
+    // Temporary maintenance overrides - loud on every actual state change, not
+    // just on boot, so flipping either one always leaves a paper trail.
+    if (apiServer.hasArg("bypass_prestart")) {
+        bool on = apiServer.arg("bypass_prestart") == "1";
+        if (on != c.bypassPreStart) {
+            Log(WARN, String("[Web] MAINTENANCE OVERRIDE - pre-start voltage/current bypass turned ")
+                      + (on ? "ON" : "off"));
+        }
+        c.bypassPreStart = on;
+    }
+    if (apiServer.hasArg("bypass_running")) {
+        bool on = apiServer.arg("bypass_running") == "1";
+        if (on != c.bypassRunning) {
+            Log(WARN, String("[Web] MAINTENANCE OVERRIDE - running protection bypass turned ")
+                      + (on ? "ON" : "off"));
+        }
+        c.bypassRunning = on;
+    }
 
     if (c.voltLow >= c.voltHigh) { apiSendError("voltage minimum must be below maximum"); return; }
     if (c.ampLow[MOTOR_WELL] >= c.ampHigh[MOTOR_WELL]) {

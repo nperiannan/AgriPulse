@@ -44,6 +44,23 @@ struct ProtConfig {
     unsigned long startConfirmMs;
     unsigned long stopConfirmMs;
     bool armWhenUncalibrated;   // default false — see protCurrentTripsArmed()
+
+    // TEMPORARY maintenance overrides (requested 2026-08-08, meant to be
+    // removed later — not a permanent feature). Deliberately still separate
+    // booleans rather than one blanket flag, and deliberately still NOT
+    // covering everything:
+    //   - Never touches protCheckStartConfirm()/protCheckStopConfirm() —
+    //     those verify the pulse itself did what it was told, most critically
+    //     PROT_STOP_FAILED (welded contactor). Bypassing that would hide
+    //     actual hardware damage behind a "successful" stop.
+    //   - bypassPreStart only overrides protCheckStartAllowed()'s verdict
+    //     (voltage/phase/frequency/meter-health) so a start can proceed
+    //     despite a failed reading — the real reading is still logged.
+    //   - bypassRunning additionally silences protEvaluateRunning() for the
+    //     whole run (over-current, dry-run/under-current, imbalance, phase
+    //     loss, sag) — nothing will stop the motor once it's going.
+    bool bypassPreStart;
+    bool bypassRunning;
 };
 
 void protInit();
