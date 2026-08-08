@@ -113,6 +113,28 @@ body{margin:0;background:var(--bg);color:var(--tx);
 .bulb.live.err{background:var(--err);border-color:var(--err);color:#fff;
   box-shadow:0 0 0 5px rgba(248,81,73,.18),0 0 14px 2px rgba(248,81,73,.45)}
 
+/* Real on/off toggle switch, for the two motor-drive controls that were a
+   text button whose own click handler had to parse its current label back
+   out to know what to send - "Engaged — release" read as ambiguous about
+   whether it WAS engaged or would BECOME engaged. Track+knob shows state
+   at a glance independent of the label beside it. warn variant is for
+   lockout specifically: ON there means "motor deliberately blocked", which
+   is an attention state, not the same "good" green as drive-enabled ON. */
+.tgl{position:relative;width:42px;height:23px;border-radius:12px;border:none;
+  background:var(--bd2);cursor:pointer;flex:none;padding:0;transition:background .2s}
+.tgl .tk{position:absolute;top:2.5px;left:2.5px;width:18px;height:18px;border-radius:50%;
+  background:#fff;transition:left .2s;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+.tgl.on{background:var(--ok)}
+.tgl.on .tk{left:21.5px}
+.tgl-warn.on{background:var(--err)}
+.tglState{font-size:12px;font-weight:600;min-width:64px}
+
+/* Well/Bore identity colors for the selector buttons - previously both used
+   the same shared "selected" accent, so the only way to tell them apart at
+   a glance was reading the text. */
+.sel button.on.well{background:var(--acc);border-color:var(--acc)}
+.sel button.on.bore{background:var(--warn);border-color:var(--warn)}
+
 /* Supply card: three lamps, amps/Hz as small stats beneath each. */
 .lampRow{display:flex;gap:10px;justify-content:space-between}
 .lampCard{flex:1;text-align:center}

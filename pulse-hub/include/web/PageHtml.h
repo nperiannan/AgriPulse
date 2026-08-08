@@ -65,8 +65,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         </div>
       </div>
       <div class="sel">
-        <button id="selWell" data-m="well">Well Motor</button>
-        <button id="selBore" data-m="bore">Bore Motor</button>
+        <button id="selWell" class="well" data-m="well">Well Motor</button>
+        <button id="selBore" class="bore" data-m="bore">Bore Motor</button>
       </div>
       <div class="brow">
         <button id="btnStart" class="btn">START</button>
@@ -74,11 +74,21 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <button id="btnClearFault" class="btn-s" style="display:none">Clear fault</button>
       </div>
       <div class="row" style="margin-top:9px">
-        <span class="lb">Maintenance lockout</span><button id="btnLock" class="btn-s">--</button>
+        <span class="lb">Drive enabled<span class="info-dot" tabindex="0">i<span class="tip">
+          Master switch for whether the software touches the motor relays at all. Off means
+          nothing here can start or stop the motor &mdash; there is no fallback control path.
+          </span></span></span>
+        <button id="btnEnable" class="tgl"><span class="tk"></span></button>
+        <span id="enableState" class="tglState">--</span>
       </div>
       <div class="row">
-        <span class="lb">Drive enabled</span><button id="btnEnable" class="btn-s">--</button>
-        <div class="hint">Disabling stops the motor from taking any command &mdash; there is no fallback control path.</div>
+        <span class="lb">Maintenance lockout<span class="info-dot" tabindex="0">i<span class="tip">
+          Different from the switch above: the drive stays fully enabled and watching, it just
+          refuses every START &mdash; including automatic resume after a power cut &mdash; until
+          this is released. Use this specifically when someone is working on the motor.
+          </span></span></span>
+        <button id="btnLock" class="tgl tgl-warn"><span class="tk"></span></button>
+        <span id="lockState" class="tglState">--</span>
       </div>
     </div>
 
@@ -146,6 +156,11 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
           <select id="bv_farm" class="inp"></select>
           <button class="btn-s" id="btnBoreValvesSave">Save</button>
         </div>
+        <div class="hint" style="margin:2px 0 4px">These are ordinary zones, opened and closed the same
+          way as any other &mdash; the buttons below are a shortcut so you don't have to go find
+          them by name in the list above. Opens for up to 4 hours; close it yourself once the
+          bore run is done, same as any zone left running.</div>
+        <div id="boreValveControls"></div>
         <div id="boreRoutingStatus" class="hint"></div>
       </details>
     </div>

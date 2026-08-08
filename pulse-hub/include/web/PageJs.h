@@ -152,8 +152,10 @@ var Motor={
       UI.el('btnStart').disabled=!d.can_start;
       UI.el('btnStop').disabled=!d.running;
       UI.el('btnClearFault').style.display=(d.state_id===11)?'':'none';
-      UI.el('btnLock').textContent=d.lockout?'Engaged — release':'Clear — engage';
-      UI.el('btnEnable').textContent=d.enabled?'Enabled — disable':'Disabled — enable';
+      UI.el('btnLock').classList.toggle('on',d.lockout);
+      UI.el('lockState').textContent=d.lockout?'Engaged':'Released';
+      UI.el('btnEnable').classList.toggle('on',d.enabled);
+      UI.el('enableState').textContent=d.enabled?'Enabled':'Disabled';
       var h='',pass=0;
       for(var i=0;i<d.checks.length;i++){var c=d.checks[i]; if(c.ok)pass++;
         h+='<div class="checkRow '+(c.ok?'pass':'fail')+'"><div class="dot"></div>'
@@ -256,7 +258,11 @@ var FieldMap={
     // for selected-but-idle was a real inconsistency between the two.
     s+='<circle cx="'+leftX+'" cy="'+wellY+'" r="'+r+'" fill="'+(selWell?wellColor:'var(--card2)')+'" stroke="'+wellColor+'" stroke-width="2.5"/>';
     s+='<text x="'+leftX+'" y="'+(wellY+3)+'" text-anchor="middle" font-size="9" font-weight="800" fill="'+(selWell?'#fff':'var(--tx2)')+'">WELL</text>';
-    s+='<line x1="'+(leftX+r)+'" y1="'+wellY+'" x2="'+trunkX+'" y2="'+wellY+'" stroke="'+wellColor+'" stroke-width="3"'
+    // Pipe color reflects FLOW only, never the motor's identity/selected
+    // color — a pipe carrying nothing should look the same grey whether
+    // the motor behind it is off, standby-armed, or a different motor
+    // entirely. Only the circle itself shows selected/running.
+    s+='<line x1="'+(leftX+r)+'" y1="'+wellY+'" x2="'+trunkX+'" y2="'+wellY+'" stroke="'+(runWell?'var(--ph-b)':'var(--bd2)')+'" stroke-width="3"'
       +(runWell?' class="flowline"':'')+'/>';
 
     // BORE — up to two routing valves.
@@ -296,9 +302,10 @@ var FieldMap={
       s+='<text x="'+(valveBoxX+valveBoxW/2+vR+9)+'" y="'+(branchY+11)+'" font-size="8.5" fill="var(--tx2)">to well/tank &middot; '+(wtZone.open?'open':'closed')+'</text>';
     } else {
       // Not configured yet: bore just merges straight into the trunk like
-      // WELL does — see fmBoreNote in the HTML for the explanation.
+      // WELL does — see fmBoreNote in the HTML for the explanation. Same
+      // flow-only pipe coloring as WELL's stub above.
       if(runBore) entryY=boreY;
-      s+='<line x1="'+(leftX+r)+'" y1="'+boreY+'" x2="'+trunkX+'" y2="'+boreY+'" stroke="'+boreColor+'" stroke-width="3"'
+      s+='<line x1="'+(leftX+r)+'" y1="'+boreY+'" x2="'+trunkX+'" y2="'+boreY+'" stroke="'+(runBore?'var(--ph-b)':'var(--bd2)')+'" stroke-width="3"'
         +(runBore?' class="flowline"':'')+'/>';
     }
 
@@ -515,6 +522,28 @@ var Zones={
                                        :'BLOCKED: '+d.bore_routing_reason;
       rs.style.color=d.bore_routing_ok?'':'var(--err)';
     }
+
+    // Direct Open/Close for whichever of the two IS configured right now -
+    // these are the exact same relays as any other zone, this just saves
+    // hunting for them by name in the list above.
+    var vc=UI.el('boreValveControls'); if(vc){
+      var rows=[];
+      if(d.bore_welltank_id>=0){
+        var wtz=d.zones.filter(function(z){return z.id===d.bore_welltank_id;})[0];
+        if(wtz)rows.push(Zones.boreValveRow(wtz,'Well/tank valve'));
+      }
+      if(d.bore_farm_id>=0){
+        var fmz=d.zones.filter(function(z){return z.id===d.bore_farm_id;})[0];
+        if(fmz)rows.push(Zones.boreValveRow(fmz,'Farm valve'));
+      }
+      vc.innerHTML=rows.join('');
+    }
+  },
+  boreValveRow:function(z,roleLabel){
+    return '<div class="row" style="border:none"><span class="lb">'+roleLabel+' — '+Zones.esc(z.name)
+      +'<span class="dt">'+(z.open?(' open, '+Zones.mmss(z.left_s)+' left'):' closed')+'</span></span>'
+      +'<button class="btn-s'+(z.open?' btn-d':'')+'" data-bvid="'+z.id+'" data-bvact="'
+      +(z.open?'stop':'run')+'">'+(z.open?'Close':'Open')+'</button></div>';
   },
   addZone:function(){
     var name=UI.el('zn_name').value.trim();
@@ -1330,9 +1359,9 @@ bind('btnStart',function(){Motor.cmd('start',{motor:Motor.pick});});
 bind('btnStop', function(){Motor.cmd('stop');});
 bind('btnClearFault', function(){Motor.cmd('clearfault');});
 bind('btnLock', function(){
-  Motor.cmd('lockout',{on:UI.el('btnLock').textContent.indexOf('Engaged')===0?'0':'1'});});
+  var d=Motor.lastData; Motor.cmd('lockout',{on:(d&&d.lockout)?'0':'1'});});
 bind('btnEnable',function(){
-  Motor.cmd('enable',{on:UI.el('btnEnable').textContent.indexOf('Enabled')===0?'0':'1'});});
+  var d=Motor.lastData; Motor.cmd('enable',{on:(d&&d.enabled)?'0':'1'});});
 bind('btnSaveProt',Protection.save);
 bind('btnSaveBypass',Protection.saveBypass);
 bind('btnSaveCal',Protection.saveCal);
@@ -1376,6 +1405,15 @@ UI.el('zoneMgrList').addEventListener('click',function(e){
   var rn=e.target.closest('button[data-zmrename]'); if(rn){Zones.renameZone(parseInt(rn.dataset.zmrename,10));return;}
   var rm=e.target.closest('button[data-zmremap]');  if(rm){Zones.remapZone(parseInt(rm.dataset.zmremap,10));return;}
   var dl=e.target.closest('button[data-zmdel]');    if(dl&&!dl.disabled){Zones.deleteZone(parseInt(dl.dataset.zmdel,10));return;}
+});
+UI.el('boreValveControls').addEventListener('click',function(e){
+  var b=e.target.closest('button[data-bvid]'); if(!b)return;
+  var id=b.dataset.bvid, act=b.dataset.bvact;
+  var maxMin=(Zones.lastZonesData&&Zones.lastZonesData.max_minutes)||240;
+  var o=act==='run'?{cmd:'run',id:id,minutes:maxMin}:{cmd:'stop',id:id};
+  UI.act('/api/zones/cmd',o,act==='run'?'Valve opened':'Valve closed').then(function(){
+    Zones.poll(); Zones.loadManager();
+  });
 });
 UI.el('zoneProgArea').addEventListener('click',function(e){
   var tgl=e.target.closest('button[data-zptoggle]'); if(tgl){Zones.progToggle(tgl.dataset.zptoggle);return;}
