@@ -22,6 +22,11 @@ static const char PAGE_CSS[] PROGMEM = R"CSS(
  --bg:#f3f6f4;--card:#fff;--card2:#eef2ef;--bd:#dbe3dd;--bd2:#c3cfc8;
  --tx:#11201a;--tx2:#5b6f65;--ok:#1a7f37;--warn:#9a6700;--err:#cf222e;--acc:#1a7f37;
 }
+/* Fixed, NOT theme-varying like --ok/--warn/--err above: R/Y/B is the
+   physical wire-colour convention this install uses (see ApiPower.cpp) -
+   a red phase should read red on every one of the 3 themes, not shift with
+   dashboard mode the way a semantic status colour does. */
+:root{--ph-r:#e0453a;--ph-y:#c99416;--ph-b:#2f66d8}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);
  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
@@ -62,35 +67,81 @@ body{margin:0;background:var(--bg);color:var(--tx);
 .b-warn{background:rgba(210,153,34,.16);color:var(--warn)}
 .b-err{background:rgba(248,81,73,.16);color:var(--err)}
 .b-off{background:var(--card2);color:var(--tx2)}
-/* Control tab's field map: the plumbing itself (pump -> trunk -> per-zone
-   branch), not an abstract tile grid. Fully dynamic — FieldMap.render()
-   rebuilds it from live zone data every poll, so it scales to however many
-   zones actually exist. */
-.fm-wrap{display:grid;grid-template-columns:1.6fr 1fr;gap:12px}
-.fm-map{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:8px;overflow:hidden}
-.fm-side{display:flex;flex-direction:column;gap:9px}
-.fm-stat{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px}
-.fm-stat-lb{font-size:10.5px;color:var(--tx2);margin-bottom:4px}
-.fm-stat-val{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
-.fm-stat-val small{font-size:11px;font-weight:500;color:var(--tx2)}
-@media (max-width:640px){.fm-wrap{grid-template-columns:1fr}}
+/* Dashboard field map: the plumbing itself (motors -> routing valves ->
+   farm trunk -> per-zone branch), not an abstract tile grid. Fully dynamic —
+   FieldMap.render() rebuilds it from live zone + motor data every poll, so
+   it scales to however many zones/valves actually exist — see FieldMap in
+   app.js, not a fixed shape hardcoded here. */
+.fm-map{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto}
 .banner{padding:9px 12px;border-radius:7px;font-size:12.5px;margin-bottom:11px;display:none}
 .bn-warn{background:rgba(210,153,34,.12);border:1px solid var(--warn);color:var(--warn)}
 .bn-err{background:rgba(248,81,73,.12);border:1px solid var(--err);color:var(--err)}
-table.ph{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-table.ph th{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--tx2);
- text-align:right;padding:4px 5px;font-weight:600}
-table.ph th:first-child{text-align:left}
-table.ph td{padding:6px 5px;text-align:right;border-top:1px solid var(--bd);font-size:15px}
-table.ph td:first-child{text-align:left;font-weight:600;font-size:13px}
-.u{font-size:10px;color:var(--tx2);margin-left:2px}
-.dead{color:var(--err)}
-/* Present, but outside the configured voltage threshold - distinct from
-   .dead (phase missing entirely): a value, just the wrong one. */
-.oor{color:var(--err);font-weight:800}
-.oor::after{content:"\26A0";font-size:10px;margin-left:3px;vertical-align:2px}
-.mrow{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}
-.mrow .big{font-size:19px;font-weight:650}
+
+/* ---- Lamp: shared glowing-badge motif — phases, the motor itself, and
+   (smaller, as .dot below) each precondition. Off/absent is always the same
+   dim .bulb base; "live" picks up whichever semantic/phase color applies.
+   Fixed rgba glow per color rather than color-mix(), matching how .b-ok
+   etc. above already accept one fixed tint rather than one per theme. ---- */
+.bulb{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;
+  font-variant-numeric:tabular-nums;background:var(--card2);color:var(--tx2);border:2.5px solid var(--bd2);
+  transition:background .2s,border-color .2s,box-shadow .2s}
+.bulb.sm{width:52px;height:52px;font-size:12px}
+.bulb.md{width:72px;height:72px;font-size:14px}
+.bulb.live.r{background:var(--ph-r);border-color:var(--ph-r);color:#fff;
+  box-shadow:0 0 0 5px rgba(224,69,58,.18),0 0 14px 2px rgba(224,69,58,.45)}
+.bulb.live.y{background:var(--ph-y);border-color:var(--ph-y);color:#fff;
+  box-shadow:0 0 0 5px rgba(201,148,22,.18),0 0 14px 2px rgba(201,148,22,.45)}
+.bulb.live.b{background:var(--ph-b);border-color:var(--ph-b);color:#fff;
+  box-shadow:0 0 0 5px rgba(47,102,216,.18),0 0 14px 2px rgba(47,102,216,.45)}
+.bulb.live.ok{background:var(--ok);border-color:var(--ok);color:#fff;
+  box-shadow:0 0 0 5px rgba(63,185,80,.18),0 0 14px 2px rgba(63,185,80,.45)}
+.bulb.live.warn{background:var(--warn);border-color:var(--warn);color:#fff;
+  box-shadow:0 0 0 5px rgba(210,153,34,.18),0 0 14px 2px rgba(210,153,34,.45)}
+.bulb.live.err{background:var(--err);border-color:var(--err);color:#fff;
+  box-shadow:0 0 0 5px rgba(248,81,73,.18),0 0 14px 2px rgba(248,81,73,.45)}
+
+/* Supply card: three lamps, amps/Hz as small stats beneath each. */
+.lampRow{display:flex;gap:10px;justify-content:space-between}
+.lampCard{flex:1;text-align:center}
+.lampCard .bulb{margin:0 auto 7px}
+.lampCard .pl{font-size:10.5px;font-weight:700;letter-spacing:.05em;color:var(--tx2);margin-bottom:7px}
+.miniStats{display:flex;flex-direction:column;gap:2px;font-size:10.5px;color:var(--tx2);font-variant-numeric:tabular-nums}
+.miniStats b{color:var(--tx);font-weight:700}
+.foot{display:flex;gap:9px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
+.foot .chip{flex:1;background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:8px 11px}
+.foot .chip .l{font-size:9.5px;color:var(--tx2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.foot .chip .v{font-size:12.5px;font-weight:700;color:var(--tx)}
+.foot .chip .v.warn{color:var(--warn)}
+.foot .chip .v.off{color:var(--tx2);font-weight:600}
+
+/* Motor card: same lamp, bigger — it's the primary read here. */
+.motorLamp{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+.motorLamp .info .name{font-size:16px;font-weight:800;letter-spacing:-.01em}
+.motorLamp .info .sub{font-size:11.5px;color:var(--tx2);margin-top:2px}
+
+/* Start Preconditions: dot per check instead of a checkmark/cross glyph -
+   same colour language as the lamps above, just small. Two-column so a
+   full-width card doesn't leave one narrow list with dead space beside it. */
+.checkGrid{display:grid;grid-template-columns:1fr 1fr;gap:0 26px}
+@media (max-width:520px){.checkGrid{grid-template-columns:1fr}}
+.checkRow{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--bd)}
+.checkRow:nth-child(-n+2){border-top:none}
+.checkRow .dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--bd2)}
+.checkRow.pass .dot{background:var(--ok);box-shadow:0 0 0 4px rgba(63,185,80,.18)}
+.checkRow.fail .dot{background:var(--err);box-shadow:0 0 0 4px rgba(248,81,73,.18)}
+.checkRow .body{flex:1;min-width:0}
+.checkRow .name{font-size:12.5px;font-weight:700}
+.checkRow.fail .name{color:var(--err)}
+.checkRow .detail{font-size:11px;color:var(--tx2);margin-top:1px}
+
+/* Field map flow animation: every flowing pipe shares ONE dash period and
+   animates exactly one period, so the loop is mathematically seamless -
+   different per-line periods animated to the same fixed offset is what
+   caused a visible jump at the seam during design review. */
+.flowline{stroke-dasharray:6 4;animation:flow .7s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-10}}
+@media (prefers-reduced-motion: reduce){.flowline{animation:none}}
+
 .sel{display:flex;gap:6px;margin-bottom:9px}
 .sel button{flex:1;padding:8px;border-radius:7px;border:1px solid var(--bd2);background:var(--card2);
  color:var(--tx2);font-size:12.5px;font-weight:600;cursor:pointer}
@@ -102,10 +153,6 @@ table.ph td:first-child{text-align:left;font-weight:600;font-size:13px}
 .btn-d{background:var(--err)}
 .btn-s{background:var(--card2);color:var(--tx);border:1px solid var(--bd2);flex:none;
  padding:7px 12px;font-size:12px;font-weight:600;border-radius:7px;cursor:pointer}
-ul.chk{list-style:none;margin:0;padding:0}
-ul.chk li{display:flex;gap:8px;padding:5px 0;border-top:1px solid var(--bd);font-size:12.5px}
-ul.chk li:first-child{border-top:none}
-.ic{flex:none;width:14px;font-weight:700}
 .dt{color:var(--tx2);font-size:11px}
 .zg{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(126px,1fr))}
 .z{background:var(--card2);border:1px solid var(--bd);border-radius:8px;padding:10px;text-align:center}

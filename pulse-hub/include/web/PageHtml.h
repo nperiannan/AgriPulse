@@ -47,28 +47,26 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div id="p-ctl" class="pane on">
    <div class="grid">
     <div class="card">
-      <div class="ct">Supply &mdash; 3 Phase <span id="threshBadge" class="badge b-off" style="font-weight:400">--</span></div>
-      <table class="ph">
-        <thead><tr><th>Phase</th><th>Volts</th><th>Amps</th><th>Hz</th></tr></thead>
-        <tbody id="phBody"><tr><td colspan="4" style="text-align:left;color:var(--tx2)">Reading&hellip;</td></tr></tbody>
-      </table>
-      <div class="row" style="margin-top:7px"><span class="lb">Phase sequence</span><span id="seqB" class="badge b-off">--</span></div>
-      <div class="row"><span class="lb">Current imbalance</span><span id="imbB" class="badge b-off">--</span></div>
+      <div class="card-hd"><span class="ct">Supply</span><span id="threshBadge" class="badge b-off">--</span></div>
+      <div class="lampRow" id="phaseLamps"></div>
+      <div class="foot">
+        <div class="chip"><div class="l">Phase sequence</div><div class="v" id="seqB">--</div></div>
+        <div class="chip"><div class="l">Imbalance</div><div class="v" id="imbB">--</div></div>
+      </div>
     </div>
 
     <div class="card">
-      <div class="ct">Motor</div>
-      <div class="mrow">
-        <span id="mState" class="big">--</span>
-        <span id="mBadge" class="badge b-off">--</span>
-        <span id="mRun" class="dt"></span>
+      <div class="card-hd"><span class="ct">Motor</span><span id="mBadge" class="badge b-off">--</span></div>
+      <div class="motorLamp">
+        <div id="mLamp" class="bulb md">--</div>
+        <div class="info">
+          <div class="name" id="mState">--</div>
+          <div class="sub" id="mRun">One starter feeds both through the changeover, so only one runs at a time.</div>
+        </div>
       </div>
       <div class="sel">
         <button id="selWell" data-m="well">Well Motor</button>
         <button id="selBore" data-m="bore">Bore Motor</button>
-      </div>
-      <div class="hint" style="margin-bottom:8px">
-        One starter feeds both through the changeover, so only one runs at a time.
       </div>
       <div class="brow">
         <button id="btnStart" class="btn">START</button>
@@ -84,24 +82,20 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="card">
-      <div class="ct">Start Preconditions</div>
-      <ul id="chk" class="chk"><li><span>Loading&hellip;</span></li></ul>
+    <div class="card full">
+      <div class="card-hd"><span class="ct">Start Preconditions</span><span id="chkBadge" class="badge b-off">--</span></div>
+      <div class="checkGrid" id="chk"></div>
     </div>
 
     <div class="card full">
-      <div class="ct">Field Map <span id="zoneBadgeCtl" class="badge b-off">--</span></div>
-      <div class="fm-wrap">
-        <div id="fmMap" class="fm-map"></div>
-        <div class="fm-side">
-          <div class="fm-stat"><div class="fm-stat-lb">Current (peak phase)</div>
-            <div class="fm-stat-val" id="fmAmps">-- <small>A</small></div></div>
-          <div class="fm-stat"><div class="fm-stat-lb">Voltage R / Y / B</div>
-            <div class="fm-stat-val" id="fmVolts">-- / -- / -- <small>V</small></div></div>
-          <button class="btn-s btn-d" id="btnFmStopAll" style="width:100%">Stop all</button>
-        </div>
+      <div class="card-hd"><span class="ct">Field Map</span>
+        <span style="display:flex;align-items:center;gap:9px">
+          <span id="zoneBadgeCtl" class="badge b-off">--</span>
+          <button class="btn-s btn-d" id="btnFmStopAll">Stop all</button>
+        </span>
       </div>
-      <div class="hint" style="margin-top:6px">Grey = off &middot; amber border = selected, not running &middot; green = running or open.</div>
+      <div id="fmMap" class="fm-map"></div>
+      <div class="hint" style="margin-top:6px">Grey = off/closed &middot; amber = selected, not running &middot; green = running &middot; blue = water actually flowing right now.</div>
       <div id="fmBoreNote" class="hint" style="display:none">Bore routing valves aren't designated yet &mdash; the diagram shows the bore feeding the farm trunk directly. Set them under Zones &rarr; Manage zones.</div>
       <div id="chkZonesSummary" class="hint" style="margin-top:8px">Open the Zones tab to manage or add zones.</div>
     </div>
