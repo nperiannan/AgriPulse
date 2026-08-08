@@ -220,6 +220,12 @@ select.inp{width:auto}
 .pane{display:none}.pane.on{display:block}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:8px;
  font-size:13px;font-weight:600;display:none;z-index:60;color:#fff}
+/* Bore-start destination picker — the only modal in the app, so kept minimal
+   rather than pulling in a whole dialog system for one use. */
+.modalOverlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;
+ align-items:center;justify-content:center;z-index:50;padding:16px}
+.modalBox{background:var(--card);border:1px solid var(--bd2);border-radius:10px;
+ padding:16px;width:min(420px,100%);max-height:86vh;overflow:auto}
 pre.log{background:var(--card2);border:1px solid var(--bd);border-radius:7px;padding:11px 13px;font-size:11.5px;
  line-height:1.55;min-height:140px;max-height:300px;overflow:auto;margin:0;white-space:pre-wrap;color:var(--tx2)}
 .hist{max-height:440px;overflow:auto}

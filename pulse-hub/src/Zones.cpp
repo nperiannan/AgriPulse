@@ -463,6 +463,25 @@ bool zonesBoreRoutingValid(String* reasonOut) {
         }
         return false;
     }
+
+    // Found 2026-08-08: the farm valve is a pure routing gate with no field of
+    // its own — opening it alone was previously treated as a complete route,
+    // but with nothing else open downstream the bore just deadheads into the
+    // trunk with nowhere for the water to actually go. A real field zone
+    // (anything other than the two routing valves themselves) must also be
+    // open. The well/tank side has no equivalent gap: the tank/well IS the
+    // real destination, so that valve alone is already a complete route.
+    if (farmOpen) {
+        bool anyFieldZoneOpen = false;
+        for (uint8_t i = 0; i < liveCount; i++) {
+            if (i == boreWellTankValveId || i == boreFarmValveId) continue;
+            if (zones[i].open) { anyFieldZoneOpen = true; break; }
+        }
+        if (!anyFieldZoneOpen) {
+            if (reasonOut) *reasonOut = "farm routing valve is open but no zone is open to receive the water";
+            return false;
+        }
+    }
     return true;
 }
 
@@ -470,7 +489,7 @@ bool zonesBoreRoutingValid(String* reasonOut) {
 //  Start / stop
 // ---------------------------------------------------------------------------
 
-ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
+ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src, uint16_t maxMinutes) {
     if (!zoneExists(id))                            return ZONE_REJ_BAD_ID;
     if (!zones[id].active)                          return ZONE_REJ_INACTIVE;
     // A relay test pulse is scheduled to auto-close on its own timer with no
@@ -479,7 +498,7 @@ ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src) {
     // the test's auto-close steal a valve out from under a real run, or vice
     // versa. Simplest safe rule: never overlap them at all.
     if (testPulseZone >= 0)                         return ZONE_REJ_TEST_BUSY;
-    if (minutes == 0 || minutes > ZONE_MAX_MINUTES) return ZONE_REJ_BAD_DURATION;
+    if (minutes == 0 || minutes > maxMinutes)       return ZONE_REJ_BAD_DURATION;
 
     // Re-running an already-open zone just extends it; that is what an operator
     // pressing "run 10 min" again plainly means.

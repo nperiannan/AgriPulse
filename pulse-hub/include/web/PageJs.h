@@ -220,6 +220,56 @@ var Motor={
   }
 };
 
+/* ---- Bore start modal (Dashboard tab) ----
+   WELL's Start button goes straight through (motorDriveRequestStart, no
+   destination to pick - it only ever feeds the farm trunk). BORE needs a
+   destination first: by design there is no default routing valve, so
+   clicking Start with BORE picked always asks rather than silently reusing
+   whatever was last open. Talks to a single new endpoint (cmd=borestart)
+   that opens the valve(s) and requests the motor start together, atomically
+   on the backend - not a chain of separate calls from here, so there is no
+   window where a routing valve is open with nobody having asked for a
+   motor yet. */
+var BoreStart={
+  open:function(){
+    var m=UI.el('boreStartModal'); if(!m)return;
+    var d=Zones.lastZonesData||{};
+    var wt=d.bore_welltank_id, fm=d.bore_farm_id;
+    if(wt===undefined||wt<0||fm===undefined||fm<0){
+      UI.toast('Set up the bore routing valves in Zones first','err');
+      return;
+    }
+    var zsel=UI.el('bsm_zone'), opts='';
+    (d.zones||[]).forEach(function(z){
+      if(z.id===wt||z.id===fm||!z.active)return;
+      opts+='<option value="'+z.id+'">'+FieldMap.esc(z.name)+'</option>';
+    });
+    zsel.innerHTML=opts||'<option value="">No zones available - add one in Zones</option>';
+    UI.el('bsm_dest').value='farm';
+    UI.el('bsm_minutes').value='30';
+    BoreStart.toggleFields();
+    m.style.display='flex';
+  },
+  toggleFields:function(){
+    UI.el('bsm_farmFields').style.display=UI.el('bsm_dest').value==='farm'?'':'none';
+  },
+  close:function(){var m=UI.el('boreStartModal'); if(m)m.style.display='none';},
+  confirm:function(){
+    var dest=UI.el('bsm_dest').value;
+    var o={cmd:'borestart',dest:dest};
+    if(dest==='farm'){
+      var zid=UI.el('bsm_zone').value;
+      var mins=Number(UI.el('bsm_minutes').value);
+      if(!zid){UI.toast('Pick a zone','err');return;}
+      if(!mins||mins<10||mins>600){UI.toast('Duration must be 10-600 minutes','err');return;}
+      o.zone_id=zid; o.minutes=mins;
+    }
+    UI.act('/api/zones/cmd',o,'Bore motor starting').then(function(d){
+      if(d&&d.ok){BoreStart.close();Motor.poll();Zones.poll();}
+    });
+  }
+};
+
 /* ---- Field map (Dashboard tab) ----
    The real plumbing, not a tile grid: two motors (WELL/BORE, changeover —
    only one ever runs), the bore's two routing valves (repurposed zone
@@ -1412,7 +1462,13 @@ UI.el('wifiNets').addEventListener('click',function(e){
   Net.wifiAction(b.dataset.act,b.dataset.ssid,parseInt(b.dataset.pri,10));
 });
 
-bind('btnStart',function(){Motor.cmd('start',{motor:Motor.pick});});
+bind('btnStart',function(){
+  if(Motor.pick==='bore'){BoreStart.open();return;}
+  Motor.cmd('start',{motor:Motor.pick});
+});
+bind('bsm_cancel',BoreStart.close);
+bind('bsm_confirm',BoreStart.confirm);
+if(UI.el('bsm_dest'))UI.el('bsm_dest').onchange=BoreStart.toggleFields;
 bind('btnStop', function(){Motor.cmd('stop');});
 bind('btnClearFault', function(){Motor.cmd('clearfault');});
 bind('btnLock', function(){

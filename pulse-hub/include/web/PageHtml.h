@@ -442,6 +442,35 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   </div>
 </div>
 <div id="toast"></div>
+
+<div id="boreStartModal" class="modalOverlay" style="display:none">
+  <div class="modalBox">
+    <div class="ct">Start Bore Motor</div>
+    <div class="hint" style="margin-bottom:9px">
+      The farm routing valve has no field of its own &mdash; pick where the water goes before
+      the motor starts.
+    </div>
+    <div class="row"><span class="lb">Destination</span>
+      <select id="bsm_dest" class="inp">
+        <option value="farm">Water a zone (farm)</option>
+        <option value="welltank">Refill well/tank</option>
+      </select></div>
+    <div id="bsm_farmFields">
+      <div class="row"><span class="lb">Zone</span>
+        <select id="bsm_zone" class="inp"></select></div>
+      <div class="row"><span class="lb">Duration (minutes)</span>
+        <input id="bsm_minutes" class="inp" type="number" min="10" max="600" step="5" value="30">
+        <div class="hint">10 minutes to 10 hours (600 min) &mdash; longer than a normal zone run,
+          since a bore-fed farm session (topping up a tank downstream, or a long deep-water) runs
+          longer than routine irrigation.</div></div>
+    </div>
+    <div class="brow">
+      <button class="btn-s" id="bsm_cancel">Cancel</button>
+      <button class="btn" id="bsm_confirm">Start</button>
+    </div>
+  </div>
+</div>
+
 <script src="/app.js?v=)HTML" FW_VERSION R"HTML("></script>
 </body>
 </html>)HTML";

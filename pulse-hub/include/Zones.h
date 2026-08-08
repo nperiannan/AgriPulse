@@ -54,6 +54,12 @@
 #define ZONE_MAX_CONCURRENT  3     // 5 HP head limit
 #define ZONE_NAME_MAX        17    // 16 chars + NUL, matches the LCD width
 #define ZONE_MAX_MINUTES     240
+// A bore-fed farm run legitimately runs much longer than a normal irrigation
+// cycle (recharging a tank, or a long deep-watering session) — kept as its
+// own constant rather than raising ZONE_MAX_MINUTES itself, so every OTHER
+// zone (Zones tab, Programs) keeps the tighter 4h default instead of
+// accidentally inheriting a 10h cap it was never asked for.
+#define ZONE_MAX_MINUTES_BORE_FARM 600
 
 // Not every valve waters a field. The borewell has a diverter downstream of it
 // that either feeds the zone valves or sends water into the well to be stored
@@ -117,8 +123,12 @@ void zonesInit();
 // Drive timers, pump coordination and interlocks. Call every loop().
 void zonesTask();
 
-// Open zone `id` for `minutes`. Returns ZONE_REJ_NONE on success.
-ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src);
+// Open zone `id` for `minutes`. Returns ZONE_REJ_NONE on success. maxMinutes
+// defaults to ZONE_MAX_MINUTES; a caller that legitimately needs a longer cap
+// (currently only the bore-to-farm start flow — see ApiZones.cpp) passes
+// ZONE_MAX_MINUTES_BORE_FARM explicitly instead of this changing for everyone.
+ZoneReject zoneStart(uint8_t id, uint16_t minutes, ZoneSource src,
+                      uint16_t maxMinutes = ZONE_MAX_MINUTES);
 
 // Close one zone, or all of them. Both defer to the pump: if closing this
 // valve would leave the motor running with nothing open, the motor is stopped
