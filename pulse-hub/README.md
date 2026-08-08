@@ -18,7 +18,7 @@ Irrigation, pump and tank-level controller built on the **Kinetic Dynamics Nebul
 - **Irrigation programs** — scheduled watering across zones, replacing the old tank-level scheduler
 - **WiFi AP+STA** — Always-on access point with background STA reconnection (priority-ordered, async
   scan, 3 attempts/SSID, 30-min cooldown)
-- **Web UI** — Built-in HTTP server, real Basic Auth (not a stub), tabs for Control / Zones / Scheduler
+- **Web UI** — Built-in HTTP server, real Basic Auth (not a stub), tabs for Dashboard / Zones / Scheduler
   / Protection / History / Network / System / Settings / Accounts
 - **MQTT** — Publishes status to broker; subscribes to control commands; supports remote broker via
   domain name — the interface the external Go/React web app talks to
@@ -249,7 +249,7 @@ stateDiagram-v2
 | `RUNNING` | Current confirmed. Continuously re-evaluated for trips. | Stop requested, a trip, or current vanishes on its own |
 | `STOP_PULSE` | STOP relay energised. | Pulse duration elapses |
 | `STOP_CONFIRM` | Pulse ended — watching for current to actually vanish. | Current gone, or confirm window times out |
-| `FAULT` | A precondition or confirm check failed. Needs a human to acknowledge. | **Clear fault** button (Control tab) |
+| `FAULT` | A precondition or confirm check failed. Needs a human to acknowledge. | **Clear fault** button (Dashboard tab) |
 | `WELDED` | STOP pulsed, current never left. Contactor is physically stuck shut. | Only when current actually clears — nothing here is remote |
 | `LOCKED_OUT` | Maintenance lockout engaged — refuses every start, including auto-resume. | Lockout released |
 | `DISABLED` | Drive doesn't touch the relays at all. Boot default. | Enabled |
@@ -260,7 +260,7 @@ stateDiagram-v2
 flowchart TB
   A1["Zones tab / auto-run\n(zonesTask pump coordination)"] --> Z["zoneStart()\nsupplyGate() checked FIRST\n(before the valve even opens)"]
   A2["Touch panel button"] --> M
-  A3["Web Control tab"] --> M
+  A3["Web Dashboard tab"] --> M
   A4["MQTT command\n(external web/mobile app)"] --> M
   A5["Scheduler"] --> M
   Z -->|valve opens, pump requested| M["motorDriveRequestStart()\nsingle choke point"]
