@@ -226,6 +226,14 @@ select.inp{width:auto}
  align-items:center;justify-content:center;z-index:50;padding:16px}
 .modalBox{background:var(--card);border:1px solid var(--bd2);border-radius:10px;
  padding:16px;width:min(420px,100%);max-height:86vh;overflow:auto}
+/* One row per ad-hoc zone step (Start-button modal) — deliberately not
+   .row/.lb, which assume one label-and-value pair; a step packs zone +
+   minutes + simultaneous/sequential + remove into one compact line. */
+.stepRow{display:flex;gap:6px;align-items:center;margin:7px 0;flex-wrap:wrap}
+.stepRow select.stepZone{flex:2;min-width:120px}
+.stepRow input.stepMin{flex:1;min-width:64px}
+.stepRow select.stepMode{flex:1;min-width:120px}
+.stepRow button{flex:none;padding:6px 10px}
 pre.log{background:var(--card2);border:1px solid var(--bd);border-radius:7px;padding:11px 13px;font-size:11.5px;
  line-height:1.55;min-height:140px;max-height:300px;overflow:auto;margin:0;white-space:pre-wrap;color:var(--tx2)}
 .hist{max-height:440px;overflow:auto}

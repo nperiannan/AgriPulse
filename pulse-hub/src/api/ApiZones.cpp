@@ -139,66 +139,92 @@ static void postZoneCmd() {
         return;
     }
 
-    if (cmd == "borestart") {
-        // The Dashboard's Bore Start button, not the Zones tab: BORE has no
-        // valve of its own to imply a destination the way WELL's direct feed
-        // does, so the operator must say where the water goes before the
-        // motor is ever asked to turn. dest=welltank recharges storage (a
-        // complete route on its own - see zonesBoreRoutingValid()); dest=farm
-        // additionally needs a real field zone + duration, since the farm
-        // routing valve alone is just a gate with nowhere of its own to send
-        // water (found 2026-08-08 - see the comment on zonesBoreRoutingValid()).
-        uint8_t wt = zoneBoreWellTankValveId(), fm = zoneBoreFarmValveId();
-        if (wt == 0xFF || fm == 0xFF) {
-            apiSendError("bore routing valves are not configured - set them up in Zones first");
-            return;
-        }
-        String dest = apiServer.arg("dest");
-        uint8_t openedFarmValve = 0xFF;   // unwind target if the zone step fails below
+    if (cmd == "startrun") {
+        // The Dashboard's Start button, both motors: by design there is no
+        // default zone/route, so the operator always says where the water
+        // goes and for how long before the motor is ever asked to turn.
+        // motor=well: steps only, no valve of its own to route.
+        // motor=bore, dest=welltank: recharges storage - a complete route on
+        //   its own (see zonesBoreRoutingValid()), no steps needed.
+        // motor=bore, dest=farm: the farm routing valve is just a gate with
+        //   nowhere of its own to send water (found 2026-08-08), so it also
+        //   needs steps - one or more zones, each with its own duration, and
+        //   marked to start with the batch already running or only once it
+        //   has fully closed (see AdHocStep in Zones.h).
+        MotorId motor = (apiServer.arg("motor") == "bore") ? MOTOR_BORE : MOTOR_WELL;
+        uint8_t farmValveId = 0xFF;   // 0xFF = nothing to route (WELL, or bore->welltank)
 
-        if (dest == "welltank") {
-            ZoneReject r = zoneStart(wt, ZONE_MAX_MINUTES, ZONE_SRC_MANUAL);
-            if (r != ZONE_REJ_NONE) { apiSendError(zoneRejectName(r)); return; }
-        } else if (dest == "farm") {
-            if (!apiServer.hasArg("zone_id") || !apiServer.hasArg("minutes")) {
-                apiSendError("zone_id and minutes required"); return;
-            }
-            int zid  = apiServer.arg("zone_id").toInt();
-            int mins = apiServer.arg("minutes").toInt();
-            if (zid < 0 || !zoneExists((uint8_t)zid)) { apiSendError("no such zone"); return; }
-            if ((uint8_t)zid == wt || (uint8_t)zid == fm) {
-                apiSendError("pick a real field zone, not a routing valve"); return;
-            }
-            if (mins < 10 || mins > ZONE_MAX_MINUTES_BORE_FARM) {
-                apiSendError("duration must be 10 minutes to 10 hours"); return;
-            }
-
-            // Farm routing valve opens first, on the SAME duration as the
-            // zone, so they close together rather than the routing valve
-            // outliving the actual watering (or vice versa).
-            ZoneReject rv = zoneStart(fm, (uint16_t)mins, ZONE_SRC_MANUAL, ZONE_MAX_MINUTES_BORE_FARM);
-            if (rv != ZONE_REJ_NONE) { apiSendError(zoneRejectName(rv)); return; }
-            openedFarmValve = fm;
-
-            ZoneReject rz = zoneStart((uint8_t)zid, (uint16_t)mins, ZONE_SRC_MANUAL, ZONE_MAX_MINUTES_BORE_FARM);
-            if (rz != ZONE_REJ_NONE) {
-                zoneStop(openedFarmValve);   // don't leave the routing valve open with nowhere to send water
-                apiSendError(zoneRejectName(rz));
+        if (motor == MOTOR_BORE) {
+            uint8_t wt = zoneBoreWellTankValveId(), fm = zoneBoreFarmValveId();
+            if (wt == 0xFF || fm == 0xFF) {
+                apiSendError("bore routing valves are not configured - set them up in Zones first");
                 return;
             }
-        } else {
-            apiSendError("dest must be welltank or farm");
-            return;
+            String dest = apiServer.arg("dest");
+            if (dest == "welltank") {
+                ZoneReject r = zoneStart(wt, ZONE_MAX_MINUTES, ZONE_SRC_MANUAL);
+                if (r != ZONE_REJ_NONE) { apiSendError(zoneRejectName(r)); return; }
+                zonesSetPreferredSource(MOTOR_BORE);
+                if (!motorDriveRequestStart(MOTOR_BORE, REASON_MANUAL_WEB)) {
+                    String why = motorDriveLastRefusalReason();
+                    apiSendError(why.length() ? why.c_str()
+                                 : "valve opened, but the bore motor start was refused - see the precondition list");
+                    return;
+                }
+                apiSendOk();
+                return;
+            } else if (dest == "farm") {
+                farmValveId = fm;
+            } else {
+                apiSendError("dest must be welltank or farm");
+                return;
+            }
         }
 
-        zonesSetPreferredSource(MOTOR_BORE);
-        if (!motorDriveRequestStart(MOTOR_BORE, REASON_MANUAL_WEB)) {
-            // Valve(s) are already open - leave them; zonesTask()'s pump
-            // coordination will retry on its own next tick, same as any other
-            // start refused on a transient supply condition.
+        // Everything below is the multi-zone ad-hoc queue - WELL always,
+        // BORE only for dest=farm (handled and returned above otherwise).
+        if (!apiServer.hasArg("steps")) { apiSendError("steps required"); return; }
+        // ZONE_MAX(32) steps at roughly 40 bytes of DOM overhead each,
+        // comfortably inside 2048.
+        DynamicJsonDocument doc(2048);
+        if (deserializeJson(doc, apiServer.arg("steps")) != DeserializationError::Ok
+            || !doc.is<JsonArray>()) {
+            apiSendError("bad steps payload"); return;
+        }
+        JsonArray arr = doc.as<JsonArray>();
+        if (arr.size() == 0)      { apiSendError("pick at least one zone"); return; }
+        if (arr.size() > ZONE_MAX) { apiSendError("too many steps"); return; }
+
+        AdHocStep steps[ZONE_MAX];
+        uint8_t n = 0;
+        uint8_t wt = zoneBoreWellTankValveId(), fm = zoneBoreFarmValveId();
+        for (JsonObject o : arr) {
+            int zid  = o["id"]  | -1;
+            int mins = o["min"] | 0;
+            if (zid < 0 || !zoneExists((uint8_t)zid)) { apiSendError("no such zone in steps"); return; }
+            if (motor == MOTOR_BORE && ((uint8_t)zid == wt || (uint8_t)zid == fm)) {
+                apiSendError("pick a real field zone, not a routing valve"); return;
+            }
+            if (mins < 1 || mins > ZONE_MAX_MINUTES_ADHOC) {
+                apiSendError("duration must be 1 minute to 10 hours"); return;
+            }
+            steps[n].zoneId       = (uint8_t)zid;
+            steps[n].minutes      = (uint16_t)mins;
+            steps[n].simultaneous = o["sim"] | false;
+            n++;
+        }
+
+        if (!adhocRunStart(motor, farmValveId, steps, n)) {
+            apiSendError("could not start - a run may already be active, or the routing valve refused to open");
+            return;
+        }
+        if (!motorDriveRequestStart(motor, REASON_MANUAL_WEB)) {
+            // Zone(s)/valve are already open and queued - leave them;
+            // zonesTask()'s pump coordination retries on its own, same as
+            // any other start refused on a transient supply condition.
             String why = motorDriveLastRefusalReason();
             apiSendError(why.length() ? why.c_str()
-                         : "valve(s) opened, but the bore motor start was refused - see the precondition list");
+                         : "zone(s) opened, but the motor start was refused - see the precondition list");
             return;
         }
         apiSendOk();

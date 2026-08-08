@@ -220,52 +220,113 @@ var Motor={
   }
 };
 
-/* ---- Bore start modal (Dashboard tab) ----
-   WELL's Start button goes straight through (motorDriveRequestStart, no
-   destination to pick - it only ever feeds the farm trunk). BORE needs a
-   destination first: by design there is no default routing valve, so
-   clicking Start with BORE picked always asks rather than silently reusing
-   whatever was last open. Talks to a single new endpoint (cmd=borestart)
-   that opens the valve(s) and requests the motor start together, atomically
-   on the backend - not a chain of separate calls from here, so there is no
-   window where a routing valve is open with nobody having asked for a
-   motor yet. */
-var BoreStart={
-  open:function(){
-    var m=UI.el('boreStartModal'); if(!m)return;
+/* ---- Start-run modal (Dashboard tab) ----
+   Neither motor has a default zone by design - clicking Start always asks
+   which zone(s), for how long, before the motor ever turns. WELL always
+   needs the zone list (it has no valve of its own to imply a destination);
+   BORE additionally asks a destination first, since dest=welltank (refilling
+   storage) needs no zone list at all - the tank/well IS the destination.
+   Each step in the list is its own zone + duration, and (from the second
+   step on) a choice of joining the batch already running (simultaneous) or
+   waiting for it to fully close first (sequential) - see AdHocStep in
+   Zones.h for how the backend actually sequences that. Talks to one
+   endpoint (cmd=startrun) that opens everything and requests the motor
+   start together, atomically on the backend - not a chain of separate calls
+   from here, so there is no window where a valve is open with nobody having
+   asked for a motor yet. */
+var StartRun={
+  motor:'well',
+  zoneOptionsHtml:'',
+  open:function(motor){
+    var m=UI.el('startRunModal'); if(!m)return;
+    StartRun.motor=motor;
     var d=Zones.lastZonesData||{};
     var wt=d.bore_welltank_id, fm=d.bore_farm_id;
-    if(wt===undefined||wt<0||fm===undefined||fm<0){
-      UI.toast('Set up the bore routing valves in Zones first','err');
-      return;
+
+    if(motor==='bore'){
+      if(wt===undefined||wt<0||fm===undefined||fm<0){
+        UI.toast('Set up the bore routing valves in Zones first','err');
+        return;
+      }
+      UI.el('srm_title').textContent='Start Bore Motor';
+      UI.el('srm_hint').textContent='Neither valve is picked by default — say where the water goes before the motor starts.';
+      UI.el('srm_destRow').style.display='';
+      UI.el('srm_dest').value='farm';
+    } else {
+      UI.el('srm_title').textContent='Start Well Motor';
+      UI.el('srm_hint').textContent='Pick which zone(s) to water and for how long.';
+      UI.el('srm_destRow').style.display='none';
     }
-    var zsel=UI.el('bsm_zone'), opts='';
+
+    var opts='';
     (d.zones||[]).forEach(function(z){
-      if(z.id===wt||z.id===fm||!z.active)return;
+      if(motor==='bore'&&(z.id===wt||z.id===fm))return;
+      if(!z.active)return;
       opts+='<option value="'+z.id+'">'+FieldMap.esc(z.name)+'</option>';
     });
-    zsel.innerHTML=opts||'<option value="">No zones available - add one in Zones</option>';
-    UI.el('bsm_dest').value='farm';
-    UI.el('bsm_minutes').value='30';
-    BoreStart.toggleFields();
+    StartRun.zoneOptionsHtml=opts||'<option value="">No zones available - add one in Zones</option>';
+
+    UI.el('srm_steps').innerHTML='';
+    StartRun.addRow();
+    StartRun.toggleStepsVisibility();
     m.style.display='flex';
   },
-  toggleFields:function(){
-    UI.el('bsm_farmFields').style.display=UI.el('bsm_dest').value==='farm'?'':'none';
+  // Every step but the first offers "with previous" (joins the batch
+  // already open) vs "after previous" (waits for it to fully close) -
+  // defaulting new rows to sequential, since that is the more common ask
+  // ("one after other") and simultaneous is the deliberate opt-in.
+  addRow:function(){
+    var wrap=UI.el('srm_steps');
+    var idx=wrap.children.length;
+    var div=document.createElement('div');
+    div.className='stepRow';
+    div.dataset.stepRow=idx;
+    div.innerHTML=
+      '<select class="inp stepZone" data-step-zone>'+StartRun.zoneOptionsHtml+'</select>'
+      +'<input class="inp stepMin" type="number" min="1" max="600" step="5" value="30" '
+        +'data-step-min placeholder="min">'
+      +(idx>0
+        ?'<select class="inp stepMode" data-step-mode>'
+          +'<option value="seq" selected>After previous</option>'
+          +'<option value="sim">With previous</option>'
+         +'</select>'
+         +'<button class="btn-s" type="button" data-step-remove>✕</button>'
+        :'');
+    wrap.appendChild(div);
   },
-  close:function(){var m=UI.el('boreStartModal'); if(m)m.style.display='none';},
+  removeRow:function(btn){
+    var row=btn.closest('[data-step-row]');
+    if(row)row.remove();
+  },
+  toggleStepsVisibility:function(){
+    var needsSteps=(StartRun.motor==='well')||(UI.el('srm_dest').value==='farm');
+    UI.el('srm_steps').style.display=needsSteps?'':'none';
+    UI.el('srm_addRow').style.display=needsSteps?'':'none';
+  },
+  close:function(){var m=UI.el('startRunModal'); if(m)m.style.display='none';},
   confirm:function(){
-    var dest=UI.el('bsm_dest').value;
-    var o={cmd:'borestart',dest:dest};
-    if(dest==='farm'){
-      var zid=UI.el('bsm_zone').value;
-      var mins=Number(UI.el('bsm_minutes').value);
-      if(!zid){UI.toast('Pick a zone','err');return;}
-      if(!mins||mins<10||mins>600){UI.toast('Duration must be 10-600 minutes','err');return;}
-      o.zone_id=zid; o.minutes=mins;
+    var motor=StartRun.motor;
+    var o={cmd:'startrun',motor:motor};
+    if(motor==='bore')o.dest=UI.el('srm_dest').value;
+
+    var needsSteps=(motor==='well')||(o.dest==='farm');
+    if(needsSteps){
+      var rows=UI.el('srm_steps').querySelectorAll('[data-step-row]');
+      if(!rows.length){UI.toast('Add at least one zone','err');return;}
+      var steps=[];
+      for(var i=0;i<rows.length;i++){
+        var r=rows[i];
+        var zid=r.querySelector('[data-step-zone]').value;
+        var mins=Number(r.querySelector('[data-step-min]').value);
+        var modeSel=r.querySelector('[data-step-mode]');
+        if(!zid){UI.toast('Pick a zone for every row','err');return;}
+        if(!mins||mins<1||mins>600){UI.toast('Duration must be 1-600 minutes','err');return;}
+        steps.push({id:Number(zid),min:mins,sim:modeSel?(modeSel.value==='sim'):false});
+      }
+      o.steps=JSON.stringify(steps);
     }
-    UI.act('/api/zones/cmd',o,'Bore motor starting').then(function(d){
-      if(d&&d.ok){BoreStart.close();Motor.poll();Zones.poll();}
+    UI.act('/api/zones/cmd',o,'Motor starting').then(function(d){
+      if(d&&d.ok){StartRun.close();Motor.poll();Zones.poll();}
     });
   }
 };
@@ -1462,13 +1523,15 @@ UI.el('wifiNets').addEventListener('click',function(e){
   Net.wifiAction(b.dataset.act,b.dataset.ssid,parseInt(b.dataset.pri,10));
 });
 
-bind('btnStart',function(){
-  if(Motor.pick==='bore'){BoreStart.open();return;}
-  Motor.cmd('start',{motor:Motor.pick});
+bind('btnStart',function(){StartRun.open(Motor.pick);});
+bind('srm_cancel',StartRun.close);
+bind('srm_confirm',StartRun.confirm);
+if(UI.el('srm_dest'))UI.el('srm_dest').onchange=StartRun.toggleStepsVisibility;
+if(UI.el('srm_addRow'))UI.el('srm_addRow').onclick=StartRun.addRow;
+if(UI.el('srm_steps'))UI.el('srm_steps').addEventListener('click',function(e){
+  var b=e.target.closest('[data-step-remove]'); if(!b)return;
+  StartRun.removeRow(b);
 });
-bind('bsm_cancel',BoreStart.close);
-bind('bsm_confirm',BoreStart.confirm);
-if(UI.el('bsm_dest'))UI.el('bsm_dest').onchange=BoreStart.toggleFields;
 bind('btnStop', function(){Motor.cmd('stop');});
 bind('btnClearFault', function(){Motor.cmd('clearfault');});
 bind('btnLock', function(){

@@ -54,12 +54,12 @@
 #define ZONE_MAX_CONCURRENT  3     // 5 HP head limit
 #define ZONE_NAME_MAX        17    // 16 chars + NUL, matches the LCD width
 #define ZONE_MAX_MINUTES     240
-// A bore-fed farm run legitimately runs much longer than a normal irrigation
-// cycle (recharging a tank, or a long deep-watering session) — kept as its
-// own constant rather than raising ZONE_MAX_MINUTES itself, so every OTHER
-// zone (Zones tab, Programs) keeps the tighter 4h default instead of
-// accidentally inheriting a 10h cap it was never asked for.
-#define ZONE_MAX_MINUTES_BORE_FARM 600
+// The Dashboard's ad-hoc multi-zone run (see AdHocStep below) legitimately
+// runs much longer than a normal irrigation cycle - kept as its own constant
+// rather than raising ZONE_MAX_MINUTES itself, so every OTHER zone (Zones
+// tab, Programs) keeps the tighter 4h default instead of accidentally
+// inheriting a 10h cap it was never asked for.
+#define ZONE_MAX_MINUTES_ADHOC 600
 
 // Not every valve waters a field. The borewell has a diverter downstream of it
 // that either feeds the zone valves or sends water into the well to be stored
@@ -223,5 +223,45 @@ bool zonesWantPump();
 // more pressure). A manual zone run from the UI always uses the last value set.
 void    zonesSetPreferredSource(MotorId m);
 MotorId zonesPreferredSource();
+
+// ---------------------------------------------------------------------------
+//  Ad-hoc run — the Dashboard's Start button (both motors)
+//
+//  NOT a Program: built fresh from whatever the operator picks right now,
+//  never named, never enabled/scheduled, and never written to NVS — it runs
+//  once and is discarded (see adhocTask()'s completion branch). Requested
+//  live: "we should have one bore well valves and one zone valve open... and
+//  by default we cannot pick any valve" plus "add time for each zone and
+//  should be able to select the time for each like one after other or
+//  simultaneously" — i.e. an ordered list of zones, each with its own
+//  duration, where each step either joins whatever batch is already running
+//  (simultaneous) or waits for that batch to fully close first (sequential).
+// ---------------------------------------------------------------------------
+
+struct AdHocStep {
+    uint8_t  zoneId;
+    uint16_t minutes;
+    // Ignored on the very first step (which always starts immediately).
+    // true:  joins the batch already open, starting right now alongside it.
+    // false: starts a new batch, once every zone in the current batch has
+    //        fully closed (its own timer, or a fault/operator stop).
+    bool simultaneous;
+};
+
+// Starts `source` and works through `steps` in order. farmValveId, if not
+// 0xFF, is opened first and held for the whole run, then closed once every
+// step has finished — the caller (ApiZones.cpp) resolves which zone id that
+// is from zoneBoreFarmValveId(); Zones.cpp itself has no opinion on bore
+// routing beyond opening/closing whatever id it's handed. Every step still
+// goes through zoneStart()'s normal interlocks (ZONE_MAX_CONCURRENT
+// included) — a step refused for exceeding it, or any other reason, is
+// logged and skipped rather than aborting the whole run.
+// Returns false without starting anything if a run is already active, or
+// stepCount is 0 or exceeds ZONE_MAX.
+bool adhocRunStart(MotorId source, uint8_t farmValveId, const AdHocStep* steps, uint8_t stepCount);
+bool adhocRunActive();
+// Cancels the queue (no more batches will open) and closes whatever the
+// current batch and the routing valve, if any, still have open.
+void adhocRunCancel();
 
 #endif // ZONES_H

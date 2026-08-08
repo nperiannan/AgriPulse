@@ -595,7 +595,103 @@ void zoneStop(uint8_t id, uint8_t histReason) {
     Log(INFO, "[Zones] " + String(zones[id].name) + " closed");
 }
 
+// ---------------------------------------------------------------------------
+//  Ad-hoc run — the Dashboard's Start button (both motors). See AdHocStep
+//  in Zones.h for the design rationale.
+// ---------------------------------------------------------------------------
+static AdHocStep adhocSteps[ZONE_MAX];
+static uint8_t   adhocStepCount     = 0;
+static uint8_t   adhocCursor        = 0;   // index of the next step NOT YET opened
+static uint8_t   adhocBatchStart    = 0;   // first index of the currently-open batch
+static bool      adhocRunActiveFlag = false;
+static MotorId   adhocSource        = MOTOR_WELL;
+static uint8_t   adhocFarmValveId   = 0xFF;
+
+// Opens the next batch: the step at adhocCursor unconditionally, then every
+// immediately-following step marked simultaneous=true. Reached the end ->
+// the whole run is done, close the routing valve (if any) and deactivate.
+static void adhocOpenNextBatch() {
+    if (adhocCursor >= adhocStepCount) {
+        adhocRunActiveFlag = false;
+        if (adhocFarmValveId != 0xFF) {
+            zoneStop(adhocFarmValveId);
+            adhocFarmValveId = 0xFF;
+        }
+        Log(INFO, "[Zones] Ad-hoc run complete");
+        return;
+    }
+    adhocBatchStart = adhocCursor;
+    bool first = true;
+    while (adhocCursor < adhocStepCount && (first || adhocSteps[adhocCursor].simultaneous)) {
+        const AdHocStep& s = adhocSteps[adhocCursor];
+        // Goes through zoneStart()'s normal interlocks unchanged, including
+        // ZONE_MAX_CONCURRENT — a "simultaneous" batch that asks for more
+        // than the pump can feed one relay too many for still gets the same
+        // refusal a manual run would; logged and skipped rather than
+        // aborting every other step queued behind it.
+        ZoneReject r = zoneStart(s.zoneId, s.minutes, ZONE_SRC_MANUAL, ZONE_MAX_MINUTES_ADHOC);
+        if (r != ZONE_REJ_NONE) {
+            Log(WARN, "[Zones] Ad-hoc step (zone " + String(s.zoneId) + ") refused: "
+                      + zoneRejectName(r) + " - skipping");
+        }
+        first = false;
+        adhocCursor++;
+    }
+}
+
+// Called from zonesTask() every tick. Advances once every zone in the
+// currently-open batch has closed on its own (each step's own zoneStart()
+// duration already drives that via the normal per-zone expiry above — this
+// does not re-implement timing, only watches for "batch done").
+static void adhocTick() {
+    if (!adhocRunActiveFlag) return;
+    for (uint8_t i = adhocBatchStart; i < adhocCursor; i++) {
+        if (zones[adhocSteps[i].zoneId].open) return;   // batch still running
+    }
+    adhocOpenNextBatch();
+}
+
+bool adhocRunStart(MotorId source, uint8_t farmValveId, const AdHocStep* steps, uint8_t stepCount) {
+    if (adhocRunActiveFlag)                    return false;
+    if (stepCount == 0 || stepCount > ZONE_MAX) return false;
+
+    if (farmValveId != 0xFF) {
+        ZoneReject r = zoneStart(farmValveId, ZONE_MAX_MINUTES_ADHOC, ZONE_SRC_MANUAL, ZONE_MAX_MINUTES_ADHOC);
+        if (r != ZONE_REJ_NONE) return false;
+    }
+
+    for (uint8_t i = 0; i < stepCount; i++) adhocSteps[i] = steps[i];
+    adhocStepCount     = stepCount;
+    adhocCursor        = 0;
+    adhocBatchStart    = 0;
+    adhocSource        = source;
+    adhocFarmValveId   = farmValveId;
+    adhocRunActiveFlag = true;
+
+    zonesSetPreferredSource(source);
+    adhocOpenNextBatch();   // opens the first batch right now
+    return true;
+}
+
+bool adhocRunActive() { return adhocRunActiveFlag; }
+
+void adhocRunCancel() {
+    if (!adhocRunActiveFlag) return;
+    zonesStopAll(ZONE_STOP_OPERATOR);   // this also clears the ad-hoc state - see below
+}
+
 void zonesStopAll(ZoneStopCause cause) {
+    // Cancel any ad-hoc run FIRST - a stop-all (fault or operator) must not
+    // have the queue quietly open a "next batch" a few ticks later as if
+    // nothing happened. Its own routing valve (if any) is just another open
+    // zone from here on, closed by the loop below like any other.
+    if (adhocRunActiveFlag) {
+        adhocRunActiveFlag = false;
+        adhocStepCount     = 0;
+        adhocFarmValveId   = 0xFF;
+        Log(WARN, "[Zones] Ad-hoc run cancelled by stop-all");
+    }
+
     // A test pulse never sets .open or pumpStopPending, so it's invisible to
     // the early-return below — handle it unconditionally first. An operator
     // hitting Stop All should stop literally everything, including a bench
@@ -784,4 +880,10 @@ void zonesTask() {
         Log(WARN, "[Zones] Pump running with no zone open - stopping to avoid deadhead");
         motorDriveRequestStop(REASON_MANUAL_WEB);
     }
+
+    // --- Ad-hoc run: open the next batch once the current one has fully
+    // closed. Deliberately last and after every early-return above (fault,
+    // wind-down, drive disabled) - never advances the queue while any of
+    // those has the field's actual attention.
+    adhocTick();
 }
