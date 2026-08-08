@@ -138,6 +138,15 @@ ProtTrip protSupplyStatus() {
 ProtTrip protCheckStartAllowed() {
     ProtTrip t = checkSupply();
     if (t != PROT_OK) {
+        // Single choke point for the pre-start bypass, deliberately - this is
+        // called from three independent places (the initial request, the
+        // MDRV_PRE_START re-check partway through the countdown, and Zones.cpp's
+        // own supplyGate() before it will open a valve) and putting the bypass
+        // here once means none of them can forget it or drift out of sync.
+        if (cfg.bypassPreStart) {
+            Log(WARN, String("[Prot] MAINTENANCE OVERRIDE - start allowed despite ") + protTripName(t));
+            return PROT_OK;
+        }
         Log(WARN, String("[Prot] Start refused - ") + protTripName(t));
     }
     return t;

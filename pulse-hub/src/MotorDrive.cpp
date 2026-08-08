@@ -223,14 +223,12 @@ bool motorDriveRequestStart(MotorId motor, uint8_t reason) {
         return false;
     }
 
+    // protCheckStartAllowed() itself is where the maintenance bypass lives
+    // (see MotorProtection.cpp) - single choke point for every caller.
     ProtTrip gate = protCheckStartAllowed();
     if (gate != PROT_OK) {
-        if (protConfig().bypassPreStart) {
-            Log(WARN, String("[Drive] MAINTENANCE OVERRIDE - starting despite ") + protTripName(gate));
-        } else {
-            lastTrip = gate;
-            return false;
-        }
+        lastTrip = gate;
+        return false;
     }
 
     // Bore-specific: exactly one of the two routing valves (repurposed zone

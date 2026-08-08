@@ -35,11 +35,13 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div class="tabs">
     <button class="on" data-p="p-ctl">Control</button>
     <button data-p="p-zones">Zones</button>
-    <button data-p="p-prog">Programs</button>
+    <button data-p="p-prog">Scheduler</button>
     <button data-p="p-prot">Protection</button>
     <button data-p="p-hist">History</button>
     <button data-p="p-net">Network</button>
     <button data-p="p-sys">System</button>
+    <button data-p="p-settings">Settings</button>
+    <button data-p="p-acct">Accounts</button>
   </div>
 
   <div id="p-ctl" class="pane on">
@@ -71,6 +73,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
       <div class="brow">
         <button id="btnStart" class="btn">START</button>
         <button id="btnStop" class="btn btn-d">STOP</button>
+        <button id="btnClearFault" class="btn-s" style="display:none">Clear fault</button>
       </div>
       <div class="row" style="margin-top:9px">
         <span class="lb">Maintenance lockout</span><button id="btnLock" class="btn-s">--</button>
@@ -320,40 +323,6 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <button class="btn-s" id="btnI2cExpAdd">+ Declare board</button>
       </div>
     </div>
-    <div class="card full">
-      <div class="card-hd"><span class="ct">Passwords</span></div>
-      <div class="pw-group">
-        <div class="pw-group-title">Web login<span class="info-dot" tabindex="0">i<span class="tip">Signs into
-          this page and the /status API. Changing it signs you out immediately — you'll need to sign back in with
-          the new password.</span></span></div>
-        <div class="pw-row">
-          <span class="field-row"><span class="field-label">Username</span>
-            <input id="web_user_inp" class="inp w" placeholder="admin"></span>
-          <span class="field-row"><span class="field-label">Password</span>
-            <input id="web_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
-        </div>
-        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnWebPass">Set web login</button></div>
-      </div>
-      <div class="pw-group">
-        <div class="pw-group-title">AP hotspot password<span class="info-dot" tabindex="0">i<span class="tip">
-          Wi-Fi password for this device's own "AgriPulse" hotspot. Applies immediately — anything already
-          joined to it, including this browser, is dropped.</span></span></div>
-        <div class="pw-row">
-          <span class="field-row" style="max-width:260px"><span class="field-label">New password</span>
-            <input id="ap_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
-        </div>
-        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnApPass">Set hotspot password</button></div>
-      </div>
-      <div class="pw-group">
-        <div class="pw-group-title">OTA upload password<span class="info-dot" tabindex="0">i<span class="tip">
-          Must match the --auth used when uploading firmware over Wi-Fi. Applies after the next reboot.</span></span></div>
-        <div class="pw-row">
-          <span class="field-row" style="max-width:260px"><span class="field-label">New password</span>
-            <input id="ota_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></span>
-        </div>
-        <div class="brow" style="margin-top:9px"><button class="btn-s" id="btnOtaPass">Set OTA password</button></div>
-      </div>
-    </div>
    </div>
   </div>
 
@@ -390,6 +359,58 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         </span>
       </div>
       <pre id="logs" class="log">Loading&hellip;</pre>
+    </div>
+   </div>
+  </div>
+
+  <div id="p-settings" class="pane">
+   <div class="grid">
+    <div class="card">
+      <div class="ct">Motor Start Warning</div>
+      <div class="row"><span class="lb">Countdown buzzer</span>
+        <button id="btnBuzzerToggle" class="btn-s">--</button></div>
+      <div class="hint">
+        Sounds for the 30 s warning window before the motor actually starts. Turning this off
+        only silences it &mdash; the 30 s wait itself still happens every time, unchanged. The
+        welded-contactor fault alarm is separate and is never affected by this.
+      </div>
+    </div>
+   </div>
+  </div>
+
+  <div id="p-acct" class="pane">
+   <div class="grid">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ct">Web Login<span class="info-dot" tabindex="0">i<span class="tip">Signs into
+          this page and the /status API. Changing it signs you out immediately &mdash; you'll need to
+          sign back in with the new password.</span></span></span>
+      </div>
+      <div class="row"><span class="lb">Username</span>
+        <input id="web_user_inp" class="inp w" placeholder="admin"></div>
+      <div class="row"><span class="lb">New password</span>
+        <input id="web_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></div>
+      <div class="brow"><button class="btn" id="btnWebPass">Set web login</button></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <span class="ct">AP Hotspot Password<span class="info-dot" tabindex="0">i<span class="tip">
+          Wi-Fi password for this device's own "AgriPulse" hotspot. Applies immediately &mdash;
+          anything already joined to it, including this browser, is dropped.</span></span></span>
+      </div>
+      <div class="row"><span class="lb">New password</span>
+        <input id="ap_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></div>
+      <div class="brow"><button class="btn" id="btnApPass">Set hotspot password</button></div>
+    </div>
+    <div class="card">
+      <div class="card-hd">
+        <span class="ct">OTA Upload Password<span class="info-dot" tabindex="0">i<span class="tip">
+          Must match the --auth used when uploading firmware over Wi-Fi. Applies after the next
+          reboot.</span></span></span>
+      </div>
+      <div class="row"><span class="lb">New password</span>
+        <input id="ota_pass_inp" class="inp w" type="password" placeholder="min 8 characters"></div>
+      <div class="brow"><button class="btn" id="btnOtaPass">Set OTA password</button></div>
     </div>
    </div>
   </div>

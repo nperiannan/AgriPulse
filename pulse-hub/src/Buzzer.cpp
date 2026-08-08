@@ -2,11 +2,14 @@
 #include "Logger.h"
 #include "Config.h"
 
+#include <Preferences.h>
+
 static bool          buzzerActive   = false;
 static BuzzerPattern currentPattern = BUZZER_NONE;
 static unsigned long buzzerStartMs  = 0;
 static unsigned long nextToggleMs   = 0;
 static bool          buzzerPinState = false;
+static bool          countdownEnabled = true;
 
 // Countdown pattern: beep ON time is fixed 300 ms.
 // OFF time starts at 2700 ms (3 s period) and shrinks linearly down to 100 ms
@@ -39,10 +42,33 @@ static uint16_t currentOffMs() {
 void initBuzzer() {
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW);
-    Log(INFO, "[Buzzer] Init on GPIO " + String(BUZZER_PIN));
+
+    Preferences p;
+    p.begin(NVS_BUZZER_NS, true);
+    countdownEnabled = p.getBool(NVS_KEY_BUZZER_ENABLED, true);
+    p.end();
+
+    Log(INFO, "[Buzzer] Init on GPIO " + String(BUZZER_PIN) + " - countdown warning "
+              + (countdownEnabled ? "enabled" : "silenced"));
 }
 
+void buzzerSetCountdownEnabled(bool on) {
+    countdownEnabled = on;
+    Preferences p;
+    p.begin(NVS_BUZZER_NS, false);
+    p.putBool(NVS_KEY_BUZZER_ENABLED, on);
+    p.end();
+    Log(INFO, String("[Buzzer] Pre-start countdown warning turned ") + (on ? "ON" : "off")
+              + " - the safety delay itself is unaffected");
+}
+
+bool buzzerCountdownEnabled() { return countdownEnabled; }
+
 void startBuzzer(BuzzerPattern pattern) {
+    // The countdown warning can be silenced; the fault alarm never can be -
+    // it's telling you something is actually wrong, not just about to start.
+    if (pattern == BUZZER_COUNTDOWN && !countdownEnabled) return;
+
     buzzerActive    = true;
     currentPattern  = pattern;
     buzzerStartMs   = millis();

@@ -30,5 +30,6 @@ void registerDriveApi(RouteRegistrar on);
 void registerProtectionApi(RouteRegistrar on);
 void registerZoneApi(RouteRegistrar on);
 void registerProgramApi(RouteRegistrar on);
+void registerSettingsApi(RouteRegistrar on);
 
 #endif // API_COMMON_H

@@ -50,14 +50,6 @@ body{margin:0;background:var(--bg);color:var(--tx);
   font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;line-height:1.5;
   color:var(--tx);box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .info-dot:hover .tip,.info-dot:focus .tip{display:block}
-/* One bordered group per password/secret, each with its own label+input
-   pairs and save button — replaces three ambiguous unlabeled-field rows. */
-.pw-group{border:1px solid var(--bd);border-radius:8px;padding:11px;margin-top:10px}
-.pw-group:first-child{margin-top:0}
-.pw-group-title{font-size:12px;font-weight:600;margin-bottom:9px;display:flex;align-items:center}
-.field-row{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px}
-.field-label{font-size:11px;color:var(--tx2);font-weight:500}
-.pw-row{display:flex;gap:8px;flex-wrap:wrap}
 /* Compact table for the raw per-phase calibration values. */
 .raw-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .raw-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;

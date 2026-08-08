@@ -4,7 +4,7 @@
 // =============================================================================
 //                              FIRMWARE VERSION
 // =============================================================================
-#define FW_VERSION "2.16.0"
+#define FW_VERSION "2.17.0"
 
 // Known transmitter firmware version (update here when transmitter is reflashed).
 #define TRANSMITTER_FW_VERSION "2.0.0"
@@ -354,7 +354,11 @@
 #define NVS_KEY_OH_DISP_ONLY   "oh_disp_only"
 #define NVS_KEY_UG_DISP_ONLY   "ug_disp_only"
 #define NVS_KEY_UG_IGNORE      "ug_ignore"       // Ignore UG state when deciding OH motor
-#define NVS_KEY_BUZZER_DELAY   "buzzer_delay"    // Buzz before motor start
+#define NVS_KEY_BUZZER_DELAY   "buzzer_delay"    // legacy MotorControl.cpp path - not wired into
+                                                  // the running system (motorDriveTask() is what
+                                                  // actually runs); kept only so old NVS blobs on
+                                                  // already-deployed units don't read as garbage
+#define NVS_KEY_BUZZER_ENABLED "buzz_en"         // real one - see buzzerCountdownEnabled()
 #define NVS_KEY_MANUAL_ASTOP   "man_auto_stop"   // Stop manual motors when tank full
 #define NVS_KEY_BLE_ENABLED    "ble_enabled"
 #define NVS_KEY_LCD_BL_MODE    "lcd_bl_mode"

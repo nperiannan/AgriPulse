@@ -755,6 +755,7 @@ void setupWebServer() {
     registerProtectionApi(guarded);
     registerZoneApi(guarded);
     registerProgramApi(guarded);
+    registerSettingsApi(guarded);
     guarded("/logs",               HTTP_GET,  [](){
         sendJson(200, getLogsJson(50));
     });

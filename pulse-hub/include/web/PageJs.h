@@ -128,6 +128,7 @@ var Motor={
       Motor.pick=d.selected;Motor.paint();
       UI.el('btnStart').disabled=!d.can_start;
       UI.el('btnStop').disabled=!d.running;
+      UI.el('btnClearFault').style.display=(d.state_id===11)?'':'none';
       UI.el('btnLock').textContent=d.lockout?'Engaged \u2014 release':'Clear \u2014 engage';
       UI.el('btnEnable').textContent=d.enabled?'Enabled \u2014 disable':'Disabled \u2014 enable';
       var h='';
@@ -599,10 +600,6 @@ var Net={
       UI.el('mq_host').value=d.broker;UI.el('mq_port').value=d.port;
       var s=UI.el('mq_st');s.textContent=d.connected?'connected':'offline';
       s.className='badge '+(d.connected?'b-ok':'b-warn');
-    }).catch(function(){});
-    Api.get('/status').then(function(d){
-      var u=UI.el('web_user_inp');
-      if(u){u.placeholder=d.webUser||'user';}
     }).catch(function(){});
     I2cExp.load();
   },
@@ -1139,7 +1136,34 @@ var Sys={
   }
 };
 
-UI.panels={'p-prot':Protection,'p-prog':Progs,'p-zones':Zones,'p-hist':Hist,'p-net':Net,'p-sys':Sys};
+/* ---- Settings (general device behaviour, not diagnostics, not credentials) ---- */
+var Settings={
+  data:null,
+  load:function(){
+    return Api.get('/api/settings').then(function(d){
+      Settings.data=d;
+      UI.el('btnBuzzerToggle').textContent=d.buzzer_countdown?'Enabled — silence':'Silenced — enable';
+    }).catch(function(){});
+  },
+  toggleBuzzer:function(){
+    var on=!(Settings.data&&Settings.data.buzzer_countdown);
+    UI.act('/api/settings/cmd',{buzzer_countdown:on?'1':'0'},on?'Countdown buzzer enabled':'Countdown buzzer silenced')
+      .then(Settings.load);
+  }
+};
+
+/* ---- Accounts (credentials — separate from Network's connectivity settings) ---- */
+var Accounts={
+  load:function(){
+    return Api.get('/status').then(function(d){
+      var u=UI.el('web_user_inp');
+      if(u){u.placeholder=d.webUser||'user';}
+    }).catch(function(){});
+  }
+};
+
+UI.panels={'p-prot':Protection,'p-prog':Progs,'p-zones':Zones,'p-hist':Hist,'p-net':Net,'p-sys':Sys,
+  'p-settings':Settings,'p-acct':Accounts};
 
 /* ---- wiring ---- */
 function bind(id,fn){var e=UI.el(id);if(e)e.onclick=fn;}
@@ -1157,6 +1181,7 @@ UI.el('wifiNets').addEventListener('click',function(e){
 
 bind('btnStart',function(){Motor.cmd('start',{motor:Motor.pick});});
 bind('btnStop', function(){Motor.cmd('stop');});
+bind('btnClearFault', function(){Motor.cmd('clearfault');});
 bind('btnLock', function(){
   Motor.cmd('lockout',{on:UI.el('btnLock').textContent.indexOf('Engaged')===0?'0':'1'});});
 bind('btnEnable',function(){
@@ -1195,6 +1220,7 @@ bind('btnZoneRescan',function(){UI.act('/api/zones/cmd',{cmd:'rescan'},'Rescanne
   if(UI.el('zoneMgrDetails').open)Zones.loadManager();
 });});
 bind('btnZoneAdd',Zones.addZone);
+bind('btnBuzzerToggle',Settings.toggleBuzzer);
 bind('btnBoreValvesSave',Zones.saveBoreValves);
 UI.el('zoneMgrDetails').addEventListener('toggle',function(){
   if(this.open)Zones.loadManager();

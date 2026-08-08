@@ -15,4 +15,13 @@ void stopBuzzer();
 void updateBuzzer();
 bool isBuzzerActive();
 
+// Whether the pre-start countdown warning (BUZZER_COUNTDOWN, sounded for
+// MOTOR_START_BUZZER_DELAY_MS before a motor start) makes any sound.
+// Persisted, defaults on. The warning DELAY itself is a fixed safety window
+// and always runs regardless of this setting — only whether it's audible is
+// configurable. Never affects BUZZER_SHORT_BEEPS: that's the welded-contactor
+// fault alarm and stays audible no matter what this is set to.
+void buzzerSetCountdownEnabled(bool on);
+bool buzzerCountdownEnabled();
+
 #endif // BUZZER_H
