@@ -20,7 +20,7 @@ static const char PAGE_CSS[] PROGMEM = R"CSS(
 }
 [data-t=light]{
  --bg:#f3f6f4;--card:#fff;--card2:#eef2ef;--bd:#dbe3dd;--bd2:#c3cfc8;
- --tx:#11201a;--tx2:#5b6f65;--ok:#1a7f37;--warn:#9a6700;--err:#cf222e;--acc:#1a7f37;
+ --tx:#11201a;--tx2:#5b6f65;--ok:#2f9e63;--warn:#c9891f;--err:#d64545;--acc:#2f9e63;
 }
 /* Fixed, NOT theme-varying like --ok/--warn/--err above: R/Y/B is the
    physical wire-colour convention this install uses (see ApiPower.cpp) -
@@ -47,7 +47,7 @@ body{margin:0;background:var(--bg);color:var(--tx);
 @media (max-width:640px){.grid.g2{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:13px}
 .card.full{grid-column:1/-1}
-.ct{font-size:11.5px;font-weight:650;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2);margin:0 0 9px}
+.ct{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--tx2);margin:0 0 9px}
 /* Standard card header: title left, at most one action button right, same
    size/position on every card that uses it — the Network tab's cards used to
    each place their button somewhere different. */

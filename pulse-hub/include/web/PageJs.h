@@ -127,15 +127,27 @@ var Power={
 /* ---- Motor ---- */
 var Motor={
   pick:'well',
+  picked:false,     // has the user (or the initial load) ever set pick? see below.
   lastData:null,   // read by FieldMap.render() — Motor.poll() always runs just before
                     // Zones.poll() in the same cycle (see cycle()), so this is fresh.
   poll:function(){
     return Api.get('/api/motor?motor='+Motor.pick).then(function(d){
       Motor.lastData=d;
       UI.el('mState').textContent=d.state;
+      // Motor.pick is what the OPERATOR has selected for the next start -
+      // real bug, found live: this used to be overwritten from d.selected
+      // (the changeover's actual CURRENT physical position) on every poll,
+      // which only moves once a start really completes CHANGEOVER. Clicking
+      // "Bore Motor" doesn't touch the relay by itself, so the very next
+      // poll (a few seconds later) was silently reverting the click back to
+      // whatever was still physically selected - "toggles back to well".
+      // Now only seeded from the server once, on the very first poll after
+      // page load; every poll after that is driven purely by the user's own
+      // click (see the .sel button handler below).
+      if(!Motor.picked){Motor.pick=d.selected;Motor.picked=true;}
       var mb=UI.el('mBadge');
-      mb.textContent='Selected: '+(d.selected==='bore'?'Bore':'Well');
-      mb.className='badge '+(d.selected==='bore'?'b-warn':'b-off');
+      mb.textContent='Selected: '+(Motor.pick==='bore'?'Bore':'Well');
+      mb.className='badge '+(Motor.pick==='bore'?'b-warn':'b-off');
       var lamp=UI.el('mLamp');
       // off (grey, disabled/locked-out) - err (fault/welded) - ok (running) -
       // otherwise warn (armed/standby, including every in-between transition
@@ -145,10 +157,10 @@ var Motor={
       else if(d.state_id===11||d.state_id===12) lc='err';
       else if(d.running) lc='ok';
       lamp.className='bulb md'+(lc!=='off'?' live '+lc:'');
-      lamp.textContent=d.selected==='bore'?'BORE':'WELL';
+      lamp.textContent=Motor.pick==='bore'?'BORE':'WELL';
       UI.el('mRun').textContent=d.run_s>0?('running for '+d.run_s+' s')
         :'One starter feeds both through the changeover, so only one runs at a time.';
-      Motor.pick=d.selected;Motor.paint();
+      Motor.paint();
       UI.el('btnStart').disabled=!d.can_start;
       UI.el('btnStop').disabled=!d.running;
       UI.el('btnClearFault').style.display=(d.state_id===11)?'':'none';
