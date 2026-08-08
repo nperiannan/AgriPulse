@@ -191,6 +191,14 @@ var Motor={
         bb.textContent='MAINTENANCE OVERRIDE ACTIVE — START ignores a failed voltage/current '+
           'reading. Remove in Protection when done testing.';}
       else bb.style.display='none';
+      var benb=UI.el('benchBanner');
+      if(d.bench_mode){benb.style.display='block';
+        benb.textContent='BENCH TEST MODE — no motor/supply connected. A start is treated as '+
+          'confirmed with zero real current. Turns off automatically on reboot; also switch it '+
+          'off in Protection before this ever goes near a real motor.';}
+      else benb.style.display='none';
+      var bm=UI.el('bench_mode');
+      if(bm&&document.activeElement!==bm)bm.checked=!!d.bench_mode;
     }).catch(function(){});
   },
   paint:function(){
@@ -730,6 +738,18 @@ var Protection={
            'voltage/current/phase reading.')+'\n\nOnly for a supervised bench test. Continue?'))return;
     UI.act('/api/protection',{bypass_prestart:pre?'1':'0',bypass_running:run?'1':'0'},
       'Overrides saved').then(Motor.poll);
+  },
+  // Separate from saveBypass on purpose: this flag is NOT part of ProtConfig,
+  // is never persisted, and lets a start reach RUNNING with zero real
+  // current, which the two flags above deliberately do not do by themselves.
+  saveBench:function(){
+    var on=UI.el('bench_mode').checked;
+    if(on&&!window.confirm(
+      'This will let a start with ZERO real current be treated as a running motor — for a bench '+
+      'test with no motor/supply connected at all. It will NOT survive a reboot. Never enable '+
+      'this near a real, wired-up motor. Continue?'))
+      {UI.el('bench_mode').checked=false;return;}
+    Motor.cmd('setbenchmode',{on:on?'1':'0'});
   },
   saveCal:function(){
     UI.act('/api/calibration',{v_a:UI.el('cal_v_a').value,v_b:UI.el('cal_v_b').value,
@@ -1376,6 +1396,10 @@ bind('btnEnable',function(){
   var d=Motor.lastData; Motor.cmd('enable',{on:(d&&d.enabled)?'0':'1'});});
 bind('btnSaveProt',Protection.save);
 bind('btnSaveBypass',Protection.saveBypass);
+// Not persisted server-side beyond RAM, so it saves itself immediately on
+// toggle rather than sitting behind a Save button someone might forget to
+// press before walking away from a bench test.
+if(UI.el('bench_mode'))UI.el('bench_mode').onchange=Protection.saveBench;
 bind('btnSaveCal',Protection.saveCal);
 bind('btnQcVR',function(){Protection.quickCal('qc_v_r','qc_live_v_r','v_a');});
 bind('btnQcVY',function(){Protection.quickCal('qc_v_y','qc_live_v_y','v_b');});

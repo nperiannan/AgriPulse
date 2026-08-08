@@ -85,4 +85,14 @@ bool motorDriveLockedOut();
 bool motorDriveEnabled();
 void motorDriveSetEnabled(bool on);
 
+// Bench-test mode: lets a start with zero real current reach and stay in
+// MDRV_RUNNING, for exercising the state machine with no motor/supply
+// connected. Deliberately NOT persisted (RAM only, always off after a
+// reboot) and deliberately independent of ProtConfig's bypassPreStart/
+// bypassRunning - see the static's own comment in MotorDrive.cpp for why
+// coupling this to those two flags was a real safety gap, found and fixed
+// 2026-08-08 by an adversarial review before it shipped.
+void motorDriveSetBenchMode(bool on);
+bool motorDriveBenchMode();
+
 #endif // MOTOR_DRIVE_H

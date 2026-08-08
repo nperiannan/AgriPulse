@@ -49,16 +49,30 @@ struct ProtConfig {
     // removed later — not a permanent feature). Deliberately still separate
     // booleans rather than one blanket flag, and deliberately still NOT
     // covering everything:
-    //   - Never touches protCheckStartConfirm()/protCheckStopConfirm() —
-    //     those verify the pulse itself did what it was told, most critically
-    //     PROT_STOP_FAILED (welded contactor). Bypassing that would hide
-    //     actual hardware damage behind a "successful" stop.
     //   - bypassPreStart only overrides protCheckStartAllowed()'s verdict
     //     (voltage/phase/frequency/meter-health) so a start can proceed
     //     despite a failed reading — the real reading is still logged.
     //   - bypassRunning additionally silences protEvaluateRunning() for the
     //     whole run (over-current, dry-run/under-current, imbalance, phase
     //     loss, sag) — nothing will stop the motor once it's going.
+    //   - protCheckStopConfirm() — specifically PROT_STOP_FAILED, welded
+    //     contactor — is NEVER bypassed by either flag, alone or together,
+    //     and needs no special-case here: with no real current ever having
+    //     flowed, the stop-confirm check already sees it gone immediately
+    //     and succeeds on its own. Bypassing it deliberately would hide
+    //     actual hardware damage behind a "successful" stop.
+    //   - Genuine no-hardware bench testing (letting MDRV_START_CONFIRM
+    //     reach RUNNING with zero current) is DELIBERATELY NOT controlled by
+    //     either flag here — see motorDriveBenchMode()/motorDriveSetBenchMode()
+    //     in MotorDrive.h. An earlier version of this feature coupled that
+    //     behavior to bypassPreStart && bypassRunning together; an
+    //     adversarial safety review (2026-08-08) found that let a REAL start
+    //     failure on a REAL motor (blown fuse, tripped overload) be silently
+    //     reported as a healthy run whenever both flags happened to still be
+    //     set from earlier testing, since nothing distinguished "bench test,
+    //     nothing wired" from "real motor, both leniencies on, genuinely
+    //     failed". It now lives behind its own independent, RAM-only flag
+    //     that cannot be conflated with these two or survive a reboot.
     bool bypassPreStart;
     bool bypassRunning;
 };

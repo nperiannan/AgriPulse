@@ -221,9 +221,10 @@ stateDiagram-v2
 
   START_PULSE --> START_CONFIRM: pulse duration elapsed
   START_CONFIRM --> RUNNING: current appears
-  START_CONFIRM --> FAULT: no current in time\nprotCheckStartConfirm() — never bypassed
+  START_CONFIRM --> FAULT: no current in time\nprotCheckStartConfirm() fails
+  START_CONFIRM --> RUNNING: no current, but benchNoHardware ON\n(bench test, no motor/supply connected)
 
-  RUNNING --> IDLE: current lost unexpectedly\n(stopped outside firmware control)
+  RUNNING --> IDLE: current lost unexpectedly\n(stopped outside firmware control,\nunless benchNoHardware ON)
   RUNNING --> STOP_PULSE: stop requested, or a running trip
 
   STOP_PULSE --> STOP_CONFIRM: pulse duration elapsed
@@ -241,7 +242,7 @@ stateDiagram-v2
 | State | Meaning | Left by |
 | --- | --- | --- |
 | `IDLE` | Nothing commanded. The only state a start can be requested from. | Start request, or Disable |
-| `PRE_START` | 30 s audible warning. Always runs full length, bypass or not. | Timer elapses, or a re-check fails |
+| `PRE_START` | 30 s audible warning. Always runs full length, bypass or bench mode or not. | Timer elapses, or a re-check fails |
 | `AWAIT_QUIESCENT` | Waiting for current to hit zero before the changeover moves. | Current confirmed zero, or timeout |
 | `CHANGEOVER` | Changeover contactor thrown, settling before the starter is pulsed. | Settle timer elapses |
 | `START_PULSE` | START relay energised (latching two-wire starter). | Pulse duration elapses |
@@ -275,11 +276,29 @@ placed in only one caller would be silently bypassable from the others.
 
 ### Maintenance bypass — what it touches, and what it never does
 
-| Can be silenced | Never silenced |
-| --- | --- |
-| `bypass_prestart` — lets a start proceed past a failed voltage/phase/frequency/meter reading | `protCheckStartConfirm()` — did current actually appear after the pulse? |
-| `bypass_running` — additionally silences over-current, dry-run, imbalance and phase-loss trips once running | `protCheckStopConfirm()` — did current actually vanish after the pulse? |
-| | `WELDED` detection — a stuck contactor is real, not a reading |
+Three independent, deliberately-not-unified flags, each with a narrower scope than the last:
+
+| Flag | Persisted? | What it does |
+| --- | --- | --- |
+| `bypass_prestart` (`ProtConfig`) | Yes (NVS) | Lets a start proceed past a failed voltage/phase/frequency/meter reading in `protCheckStartAllowed()`. |
+| `bypass_running` (`ProtConfig`) | Yes (NVS) | Additionally silences over-current, dry-run, imbalance and phase-loss trips once running (`protEvaluateRunning()`). |
+| `benchNoHardware` (`MotorDrive.cpp`, RAM only) | **No — always off after reboot** | Lets `MDRV_START_CONFIRM` proceed to `RUNNING` with zero real current, and keeps `MDRV_RUNNING` from immediately bouncing back to `IDLE` when it sees no current — for bench-testing the state machine with no motor or supply connected at all. |
+
+`protCheckStopConfirm()` (did current actually vanish after the STOP pulse?) and `WELDED` detection
+are never bypassed by any of the three, alone or together — with no real current ever having flowed
+in the bench-mode case, stop-confirm already sees it gone immediately and succeeds on its own, so no
+special case was even needed there.
+
+**Revised 2026-08-08, twice.** First pass bypassed `MDRV_START_CONFIRM` by requiring `bypass_prestart`
+AND `bypass_running` together — reusing two flags that already had a separate, legitimate, narrower
+meaning (tolerate a bad *reading* during a real run). An adversarial multi-agent review the same day
+found that this let a **real** start failure on a **real** motor (blown fuse, tripped overload, wiring
+fault) be silently reported as a healthy `RUNNING` motor whenever both flags happened to still be set
+from earlier bench testing — because nothing distinguished "bench test, nothing wired" from "real
+motor, both leniencies on, genuinely failed to start." It also reached unattended scheduled starts,
+not just manual sessions. Fixed by moving this behavior off `ProtConfig` entirely onto `benchNoHardware`
+— a flag that structurally cannot be "left on from last week," and cannot be conflated with either of
+the two real-production leniencies above.
 
 ## REST API Endpoints
 
@@ -288,7 +307,7 @@ every route below sits behind the same HTTP Basic Auth wrapper regardless of whi
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET/POST | `/api/motor`, `/api/motor/cmd` | Drive state, precondition checklist, start/stop/lockout/enable/clearfault |
+| GET/POST | `/api/motor`, `/api/motor/cmd` | Drive state, precondition checklist, start/stop/lockout/enable/clearfault/setbenchmode |
 | GET/POST | `/api/zones`, `/api/zones/cmd` | Zone list, run/stop/create/delete/remap, bore routing-valve config |
 | GET/POST | `/api/protection` | Trip thresholds (per-motor current), maintenance bypass toggles |
 | POST | `/api/calibration` | Meter scaling — what arms current-based trips |

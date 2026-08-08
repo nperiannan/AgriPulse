@@ -27,6 +27,10 @@ static void getMotor() {
     doc["armed"]     = protCurrentTripsArmed();
     doc["bypass_prestart"] = protConfig().bypassPreStart;
     doc["bypass_running"]  = protConfig().bypassRunning;
+    // Independent of the two flags above - RAM only, always false after a
+    // reboot. See MotorDrive.h/.cpp for why this must never be coupled to
+    // bypass_prestart/bypass_running.
+    doc["bench_mode"] = motorDriveBenchMode();
 
     ProtTrip supply = protSupplyStatus();
     const AdeReadings& r = adeGetReadings();
@@ -95,6 +99,8 @@ static void postMotorCmd() {
         motorDriveSetEnabled(apiServer.arg("on") == "1");
     } else if (cmd == "clearfault") {
         motorDriveClearFault();
+    } else if (cmd == "setbenchmode") {
+        motorDriveSetBenchMode(apiServer.arg("on") == "1");
     } else {
         apiSendError("unknown command");
         return;

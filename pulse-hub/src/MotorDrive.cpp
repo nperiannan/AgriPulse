@@ -26,6 +26,24 @@ static bool          enabled  = false;
 static bool          lockout  = false;
 static unsigned long minOffMs = MOTOR_MIN_OFF_MS_DEFAULT;
 
+// Bench-test mode: no motor, no supply connected at all - lets the state
+// machine reach and stay in MDRV_RUNNING with zero real current, purely to
+// exercise the sequence on the bench. Deliberately NOT protConfig()'s
+// bypassPreStart/bypassRunning and NOT persisted to NVS:
+//   - An adversarial safety review (2026-08-08) found that reusing those two
+//     flags for this let a REAL start failure (blown fuse, tripped overload,
+//     wiring fault) on a REAL motor be silently reported as a healthy run
+//     whenever both flags happened to be set for their own, separate,
+//     legitimate purpose (riding through a bad reading during an actual
+//     run) - because nothing distinguished "bench test, nothing wired" from
+//     "real motor, both leniencies on, genuinely failed to start". It also
+//     reached unattended scheduled starts, not just manual bench sessions.
+//   - A RAM-only flag that resets to false on every boot closes that gap
+//     structurally: it cannot survive being "left on from weeks ago", and
+//     cannot be conflated with either of the two documented, narrower,
+//     NVS-persisted leniencies.
+static bool benchNoHardware = false;
+
 // -----------------------------------------------------------------------------
 //  Helpers
 // -----------------------------------------------------------------------------
@@ -135,6 +153,13 @@ MotorId motorDriveSelected() { return selected; }
 ProtTrip motorDriveLastTrip() { return lastTrip; }
 const char* motorDriveLastRefusalReason() { return lastRefusalReason.c_str(); }
 bool motorDriveLockedOut() { return lockout; }
+
+bool motorDriveBenchMode() { return benchNoHardware; }
+void motorDriveSetBenchMode(bool on) {
+    benchNoHardware = on;
+    Log(WARN, String("[Drive] BENCH TEST MODE (no motor/supply connected) turned ") + (on ? "ON" : "off")
+              + " - RAM only, will reset off on next reboot regardless");
+}
 
 bool motorDriveIsRunning() {
     return state == MDRV_RUNNING;
@@ -357,6 +382,30 @@ void motorDriveTask() {
         }
         ProtTrip t = protCheckStartConfirm(inStateMs());
         if (t != PROT_OK) {
+            // Bench-test mode (2026-08-08, revised same day after an
+            // adversarial safety review): with no real motor/supply
+            // connected at all, "did current appear" can never be true, so
+            // this is the one thing bench mode needs to bypass to let the
+            // state machine be exercised end-to-end. Gated on the
+            // independent, RAM-only benchNoHardware flag - NOT on
+            // bypassPreStart/bypassRunning, which have their own separate,
+            // narrower, real-production meaning (tolerate a bad reading
+            // during an ACTUAL run) and must never be able to make a real
+            // start failure look like a healthy run.
+            // protCheckStopConfirm()/WELDED detection are NOT touched here
+            // or anywhere else - and don't need to be for this: with no
+            // real current ever flowing, STOP_CONFIRM already sees it gone
+            // immediately and succeeds normally.
+            if (benchNoHardware) {
+                Log(WARN, "[Drive] BENCH TEST MODE - treating start as confirmed with no "
+                          "current (no motor/supply connected)");
+                runningSinceMs = millis();
+                // Deliberately no history record here: this run never
+                // actually happened electrically, so it must not appear in
+                // the operational history as if it did.
+                enter(MDRV_RUNNING);
+                break;
+            }
             lastTrip = t;
             enter(MDRV_FAULT);
         }
@@ -364,7 +413,12 @@ void motorDriveTask() {
     }
 
     case MDRV_RUNNING: {
-        if (!currentFlowing()) {
+        // Same bench-mode allowance: a forced-RUNNING state with no real
+        // current would otherwise immediately bounce back out via this
+        // exact check on the very next task tick - "current lost" is true
+        // from the first moment when there was never any current to begin
+        // with. Independent flag, same reasoning as MDRV_START_CONFIRM above.
+        if (!currentFlowing() && !benchNoHardware) {
             Log(WARN, "[Drive] Current lost - motor stopped outside firmware control");
             lastStopMs  = millis();
             everStopped = true;

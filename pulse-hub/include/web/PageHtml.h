@@ -31,6 +31,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div id="calBanner" class="banner bn-warn"></div>
   <div id="faultBanner" class="banner bn-err"></div>
   <div id="bypassBanner" class="banner bn-err" style="display:none"></div>
+  <div id="benchBanner" class="banner bn-warn" style="display:none"></div>
 
   <div class="tabs">
     <button class="on" data-p="p-ctl">Dashboard</button>
@@ -209,8 +210,22 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
         <div class="hint">Lets START proceed despite a failed voltage/phase/frequency/meter reading. Protection while running stays on unless the option below is also checked.</div></div>
       <div class="row"><span class="lb">Also bypass protection while running</span>
         <input id="bypass_running" type="checkbox">
-        <div class="hint">Nothing will stop the motor once it's running &mdash; no dry-run stop, no overload stop, no phase-loss stop. Only for a supervised bench test.</div></div>
+        <div class="hint">Nothing will stop the motor once it's running &mdash; no dry-run stop, no overload stop, no phase-loss stop. The STOP-failed / welded-contactor check is never affected by either box.</div></div>
       <div class="brow"><button class="btn" id="btnSaveBypass" style="background:var(--err)">Save overrides</button></div>
+    </div>
+
+    <div class="card" style="border-color:var(--warn);border-width:2px">
+      <div class="ct" style="color:var(--warn)">Bench Test Mode &mdash; No Hardware Connected</div>
+      <div class="hint" style="margin-bottom:9px">
+        For exercising the START/STOP state machine on the bench with <b>no motor and no supply
+        wired up at all</b>. A start will be treated as confirmed with zero real current, and the
+        RUNNING state won't collapse the instant it sees no current. Separate from the overrides
+        above on purpose &mdash; this one is <b>never saved</b>: it lives in RAM only and is always
+        off again after a reboot, so it can't be left on by accident on a real installation.
+      </div>
+      <div class="row"><span class="lb">Bench mode (no motor/supply connected)</span>
+        <input id="bench_mode" type="checkbox">
+        <div class="hint">Turns off automatically on every reboot. Does not affect protCheckStopConfirm() / welded-contactor detection.</div></div>
     </div>
 
     <div class="card">
