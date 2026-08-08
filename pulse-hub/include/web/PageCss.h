@@ -85,6 +85,10 @@ table.ph td{padding:6px 5px;text-align:right;border-top:1px solid var(--bd);font
 table.ph td:first-child{text-align:left;font-weight:600;font-size:13px}
 .u{font-size:10px;color:var(--tx2);margin-left:2px}
 .dead{color:var(--err)}
+/* Present, but outside the configured voltage threshold - distinct from
+   .dead (phase missing entirely): a value, just the wrong one. */
+.oor{color:var(--err);font-weight:800}
+.oor::after{content:"\26A0";font-size:10px;margin-left:3px;vertical-align:2px}
 .mrow{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}
 .mrow .big{font-size:19px;font-weight:650}
 .sel{display:flex;gap:6px;margin-bottom:9px}

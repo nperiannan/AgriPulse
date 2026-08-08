@@ -74,14 +74,25 @@ try{var _t=localStorage.getItem('apt');if(_t)document.documentElement.setAttribu
 
 /* ---- Power ---- */
 var Power={
+  // True when a phase is present but reading outside the configured voltage
+  // threshold - "present, wrong value" is a different fact than "not present
+  // at all" (.dead), and both are worth telling apart at a glance.
+  oor:function(p,d){return p.present&&(p.volts<d.v_low||p.volts>d.v_high);},
+  voltSpan:function(p,d){
+    var cls=!p.present?'dead':(Power.oor(p,d)?'oor':'');
+    return '<span'+(cls?' class="'+cls+'"':'')+'>'+UI.fmt(p.volts,0)+'</span>';
+  },
   poll:function(){
     return Api.get('/api/power').then(function(d){
       var h='';
       for(var i=0;i<d.phases.length;i++){var p=d.phases[i];
-        h+='<tr><td>'+p.name+'</td><td'+(p.present?'':' class="dead"')+'>'+UI.fmt(p.volts,0)+
+        var vCls=!p.present?'dead':(Power.oor(p,d)?'oor':'');
+        h+='<tr><td>'+p.name+'</td><td'+(vCls?' class="'+vCls+'"':'')+'>'+UI.fmt(p.volts,0)+
            '<span class="u">V</span></td><td>'+UI.fmt(p.amps,2)+'<span class="u">A</span></td><td>'+
            UI.fmt(p.hz,1)+'<span class="u">Hz</span></td></tr>';}
       UI.el('phBody').innerHTML=h;
+      var tb=UI.el('threshBadge');
+      if(tb)tb.textContent=UI.fmt(d.v_low,0)+'–'+UI.fmt(d.v_high,0)+' V';
       // Feeds the Protection tab's quick-calibrate helper (updates even while
       // that tab isn't visible — cheap, and it's fresh the moment you switch to it).
       var rv=UI.el('qc_live_v_r'),yv=UI.el('qc_live_v_y'),bv=UI.el('qc_live_v_b'),iv=UI.el('qc_live_i');
@@ -89,13 +100,13 @@ var Power={
       if(yv)yv.textContent=UI.fmt(d.phases[1]&&d.phases[1].volts,1);
       if(bv)bv.textContent=UI.fmt(d.phases[2]&&d.phases[2].volts,1);
       if(iv)iv.textContent=UI.fmt(d.max_amps,2);
-      // Field map stats (Control tab) — same source as the Supply table
+      // Field map stats (Dashboard tab) — same source as the Supply table
       // above, just given equal visual weight instead of buried in a table.
       var fa=UI.el('fmAmps');
       if(fa)fa.innerHTML=UI.fmt(d.max_amps,2)+' <small>A</small>';
       var fv=UI.el('fmVolts');
-      if(fv)fv.innerHTML=UI.fmt(d.phases[0]&&d.phases[0].volts,0)+' / '+UI.fmt(d.phases[1]&&d.phases[1].volts,0)
-        +' / '+UI.fmt(d.phases[2]&&d.phases[2].volts,0)+' <small>V</small>';
+      if(fv&&d.phases.length===3)fv.innerHTML=Power.voltSpan(d.phases[0],d)+' / '+Power.voltSpan(d.phases[1],d)
+        +' / '+Power.voltSpan(d.phases[2],d)+' <small>V</small>';
       var mb=UI.el('meterBadge');
       mb.textContent=d.healthy?'meter ok':'meter fault';
       mb.className='badge '+(d.healthy?'b-ok':'b-err');
@@ -118,8 +129,11 @@ var Power={
 /* ---- Motor ---- */
 var Motor={
   pick:'well',
+  lastData:null,   // read by FieldMap.render() — Motor.poll() always runs just before
+                    // Zones.poll() in the same cycle (see cycle()), so this is fresh.
   poll:function(){
     return Api.get('/api/motor?motor='+Motor.pick).then(function(d){
+      Motor.lastData=d;
       UI.el('mState').textContent=d.state;
       var b=UI.el('mBadge');
       b.textContent=d.running?'running':(d.enabled?'idle':'disabled');
@@ -163,48 +177,113 @@ var Motor={
   }
 };
 
-/* ---- Field map (Control tab) ----
-   The plumbing itself, not a tile grid: a pump node, a trunk line, one
-   branch per zone. Fully generated from live /api/zones data every poll —
-   scales to however many zones actually exist (not a fixed mock count) and
-   never touches motor state directly, it just reflects what Zones.poll()
-   already fetched. */
+/* ---- Field map (Dashboard tab) ----
+   The real plumbing, not a tile grid: two motors (WELL/BORE, changeover —
+   only one ever runs), the bore's two routing valves (repurposed zone
+   relays — one to well/tank, one to the farm trunk), then the farm trunk
+   branching to every zone. WELL has no valve of its own: it only ever
+   feeds the farm trunk directly. Fully generated from live /api/zones +
+   Motor.lastData every poll — never touches motor state itself, only
+   reflects what Zones.poll()/Motor.poll() already fetched. */
 var FieldMap={
   esc:function(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');},
   mmss:function(s){var m=Math.floor(s/60),r=s%60;return m+':'+(r<10?'0':'')+r;},
+  motorColor:function(sel,run){return run?'var(--ok)':(sel?'var(--warn)':'var(--bd2)');},
+  // One rect + its edge color, for a zone or a routing valve alike — both
+  // are just a relay with a name and an open/closed state.
+  box:function(x,y,w,h,open,inactive){
+    var col=open?'var(--ok)':(inactive?'var(--err)':'var(--bd2)');
+    return {col:col, rect:'<rect x="'+x+'" y="'+(y-h/2)+'" width="'+w+'" height="'+h+'" rx="6" fill="'
+      +(open?'rgba(46,160,67,.15)':'var(--card)')+'" stroke="'+col+'" stroke-width="1.5"'
+      +(inactive?' opacity="0.55"':'')+'/>'};
+  },
   render:function(d){
-    var el=UI.el('fmMap'); if(!el)return;   // Control tab's map only exists on that pane
-    var zones=d.zones||[];   // every zone, including inactive ones (shown dimmed, not hidden)
-    var n=zones.length;
-    var rowH=42, top=16, svgW=520, svgH=n?Math.max(top*2+n*rowH,90):90;
-    var trunkX=104, boxX=148, boxW=svgW-boxX-14, boxH=32;
-    var anyOpen=zones.some(function(z){return z.open;});
-    var motorY=svgH/2;
-    var pumpColor=anyOpen?'var(--ok)':'var(--bd2)';
-    var s='<svg viewBox="0 0 '+svgW+' '+svgH+'" width="100%" height="'+svgH+'" role="img" aria-label="Field layout">';
-    s+='<circle cx="34" cy="'+motorY+'" r="18" fill="var(--card)" stroke="'+pumpColor+'" stroke-width="2"/>';
-    s+='<text x="34" y="'+(motorY+3)+'" text-anchor="middle" font-size="8.5" font-weight="700" fill="var(--tx)">PUMP</text>';
-    s+='<line x1="52" y1="'+motorY+'" x2="'+trunkX+'" y2="'+motorY+'" stroke="'+pumpColor+'" stroke-width="3"/>';
-    if(n>1){
-      var firstY=top+rowH/2, lastY=top+(n-1)*rowH+rowH/2;
-      s+='<line x1="'+trunkX+'" y1="'+firstY+'" x2="'+trunkX+'" y2="'+lastY+'" stroke="var(--bd2)" stroke-width="3"/>';
+    var el=UI.el('fmMap'); if(!el)return;   // Dashboard tab's map only exists on that pane
+    var allZones=d.zones||[];
+    var wtId=d.bore_welltank_id, farmId=d.bore_farm_id;
+    var wtZone=allZones.filter(function(z){return z.id===wtId;})[0]||null;
+    var fmZone=allZones.filter(function(z){return z.id===farmId;})[0]||null;
+    var boreConfigured=wtId>=0&&farmId>=0&&!!wtZone&&!!fmZone;
+    var note=UI.el('fmBoreNote'); if(note)note.style.display=boreConfigured?'none':'block';
+    // The two valve zones are drawn explicitly up by the motors, not as a
+    // generic branch — showing them again in the zone list would be the
+    // same relay drawn twice under two different meanings.
+    var farmZones=boreConfigured
+      ?allZones.filter(function(z){return z.id!==wtId&&z.id!==farmId;})
+      :allZones;
+
+    var md=Motor.lastData||{};
+    var selWell=md.selected==='well', selBore=md.selected==='bore';
+    var runWell=!!md.running&&selWell, runBore=!!md.running&&selBore;
+    var wellColor=FieldMap.motorColor(selWell,runWell);
+    var boreColor=FieldMap.motorColor(selBore,runBore);
+
+    var n=farmZones.length;
+    var top=16, rowH=42, reserved=3;   // rows 0=WELL, 1=BORE, 2=well/tank valve
+    var svgW=620, svgH=top*2+(reserved+Math.max(n,1))*rowH;
+    var leftX=40, r=18;
+    var wellY=top+rowH/2, boreY=top+rowH+rowH/2, branchY=top+2*rowH+rowH/2;
+    var valveBoxX=100, valveBoxW=160, valveBoxH=32;
+    var trunkX=valveBoxX+valveBoxW+20, boxX=trunkX+40, boxW=svgW-boxX-14, boxH=32;
+
+    var s='<svg viewBox="0 0 '+svgW+' '+svgH+'" width="100%" height="'+svgH
+      +'" role="img" aria-label="Field layout: well and bore motors, routing valves, and zones">';
+
+    // WELL — no valve of its own, feeds the farm trunk directly.
+    s+='<circle cx="'+leftX+'" cy="'+wellY+'" r="'+r+'" fill="var(--card)" stroke="'+wellColor+'" stroke-width="2.5"/>';
+    s+='<text x="'+leftX+'" y="'+(wellY+3)+'" text-anchor="middle" font-size="9" font-weight="700" fill="var(--tx)">WELL</text>';
+    s+='<line x1="'+(leftX+r)+'" y1="'+wellY+'" x2="'+trunkX+'" y2="'+wellY+'" stroke="'+wellColor+'" stroke-width="3"'
+      +(runWell?' stroke-dasharray="5 4"':'')+'/>';
+
+    // BORE — up to two routing valves.
+    s+='<circle cx="'+leftX+'" cy="'+boreY+'" r="'+r+'" fill="var(--card)" stroke="'+boreColor+'" stroke-width="2.5"/>';
+    s+='<text x="'+leftX+'" y="'+(boreY+3)+'" text-anchor="middle" font-size="9" font-weight="700" fill="var(--tx)">BORE</text>';
+
+    if(boreConfigured){
+      var fb=FieldMap.box(valveBoxX,boreY,valveBoxW,valveBoxH,fmZone.open,fmZone.active===false);
+      s+='<line x1="'+(leftX+r)+'" y1="'+boreY+'" x2="'+valveBoxX+'" y2="'+boreY+'" stroke="'+fb.col+'" stroke-width="3"'
+        +(fmZone.open?' stroke-dasharray="5 4"':'')+'/>';
+      s+=fb.rect;
+      s+='<text x="'+(valveBoxX+9)+'" y="'+(boreY-2)+'" font-size="10" font-weight="700" fill="var(--tx)">'+FieldMap.esc(fmZone.name)+'</text>';
+      s+='<text x="'+(valveBoxX+9)+'" y="'+(boreY+11)+'" font-size="8.5" fill="var(--tx2)">to farm · '+(fmZone.open?'open':'closed')+'</text>';
+      s+='<line x1="'+(valveBoxX+valveBoxW)+'" y1="'+boreY+'" x2="'+trunkX+'" y2="'+boreY+'" stroke="'+fb.col+'" stroke-width="3"'
+        +(fmZone.open?' stroke-dasharray="5 4"':'')+'/>';
+
+      var wb=FieldMap.box(valveBoxX,branchY,valveBoxW,valveBoxH,wtZone.open,wtZone.active===false);
+      s+='<line x1="'+leftX+'" y1="'+(boreY+r)+'" x2="'+leftX+'" y2="'+branchY+'" stroke="'+wb.col+'" stroke-width="3"'
+        +(wtZone.open?' stroke-dasharray="5 4"':'')+'/>';
+      s+='<line x1="'+leftX+'" y1="'+branchY+'" x2="'+valveBoxX+'" y2="'+branchY+'" stroke="'+wb.col+'" stroke-width="3"'
+        +(wtZone.open?' stroke-dasharray="5 4"':'')+'/>';
+      s+=wb.rect;
+      s+='<text x="'+(valveBoxX+9)+'" y="'+(branchY-2)+'" font-size="10" font-weight="700" fill="var(--tx)">'+FieldMap.esc(wtZone.name)+'</text>';
+      s+='<text x="'+(valveBoxX+9)+'" y="'+(branchY+11)+'" font-size="8.5" fill="var(--tx2)">to well/tank · '+(wtZone.open?'open':'closed')+'</text>';
+    } else {
+      // Not configured yet: bore just merges straight into the trunk like
+      // WELL does — see fmBoreNote in the HTML for the explanation.
+      s+='<line x1="'+(leftX+r)+'" y1="'+boreY+'" x2="'+trunkX+'" y2="'+boreY+'" stroke="'+boreColor+'" stroke-width="3"'
+        +(runBore?' stroke-dasharray="5 4"':'')+'/>';
     }
-    if(!n){
-      s+='<text x="'+(trunkX+20)+'" y="'+(motorY+4)+'" font-size="12" fill="var(--tx2)">No zones yet — add one on the Zones tab.</text>';
+
+    // Farm trunk: WELL and BORE's farm-valve line merge here, then branch
+    // to every real farm zone.
+    var lastZoneY=n?(top+(reserved+n-1)*rowH+rowH/2):(top+reserved*rowH+rowH/2);
+    s+='<line x1="'+trunkX+'" y1="'+wellY+'" x2="'+trunkX+'" y2="'+Math.max(boreY,lastZoneY)+'" stroke="var(--bd2)" stroke-width="3"/>';
+
+    if(n>0){
+      farmZones.forEach(function(z,i){
+        var y=top+(reserved+i)*rowH+rowH/2;
+        var zb=FieldMap.box(boxX,y,boxW,boxH,z.open,z.active===false);
+        s+='<line x1="'+trunkX+'" y1="'+y+'" x2="'+boxX+'" y2="'+y+'" stroke="'+zb.col+'" stroke-width="3"'
+          +(z.open?' stroke-dasharray="5 4"':'')+'/>';
+        s+=zb.rect;
+        s+='<text x="'+(boxX+9)+'" y="'+(y-2)+'" font-size="11" font-weight="700" fill="var(--tx)">'+FieldMap.esc(z.name)+'</text>';
+        var status=z.open?(FieldMap.mmss(z.left_s)+' left'):(z.active===false?'inactive':'closed');
+        s+='<text x="'+(boxX+9)+'" y="'+(y+11)+'" font-size="9" fill="var(--tx2)">'+FieldMap.esc(status)+'</text>';
+      });
+    } else {
+      s+='<text x="'+boxX+'" y="'+(top+reserved*rowH+rowH/2+4)+'" font-size="12" fill="var(--tx2)">No zones yet — add one on the Zones tab.</text>';
     }
-    zones.forEach(function(z,i){
-      var y=top+i*rowH+rowH/2, boxY=y-boxH/2;
-      var inactive=z.active===false;
-      var col=z.open?'var(--ok)':(inactive?'var(--err)':'var(--bd2)');
-      var fill=z.open?'rgba(46,160,67,.15)':'var(--card)';
-      s+='<line x1="'+trunkX+'" y1="'+y+'" x2="'+boxX+'" y2="'+y+'" stroke="'+col+'" stroke-width="3"'
-        +(z.open?' stroke-dasharray="5 4"':'')+'/>';
-      s+='<rect x="'+boxX+'" y="'+boxY+'" width="'+boxW+'" height="'+boxH+'" rx="6" fill="'+fill
-        +'" stroke="'+col+'" stroke-width="1.5"'+(inactive?' opacity="0.55"':'')+'/>';
-      s+='<text x="'+(boxX+9)+'" y="'+(y-2)+'" font-size="11" font-weight="700" fill="var(--tx)">'+FieldMap.esc(z.name)+'</text>';
-      var status=z.open?(FieldMap.mmss(z.left_s)+' left'):(inactive?'inactive':'closed');
-      s+='<text x="'+(boxX+9)+'" y="'+(y+11)+'" font-size="9" fill="var(--tx2)">'+FieldMap.esc(status)+'</text>';
-    });
+
     s+='</svg>';
     el.innerHTML=s;
   }

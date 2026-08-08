@@ -33,7 +33,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div id="bypassBanner" class="banner bn-err" style="display:none"></div>
 
   <div class="tabs">
-    <button class="on" data-p="p-ctl">Control</button>
+    <button class="on" data-p="p-ctl">Dashboard</button>
     <button data-p="p-zones">Zones</button>
     <button data-p="p-prog">Scheduler</button>
     <button data-p="p-prot">Protection</button>
@@ -47,7 +47,7 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
   <div id="p-ctl" class="pane on">
    <div class="grid">
     <div class="card">
-      <div class="ct">Supply &mdash; 3 Phase</div>
+      <div class="ct">Supply &mdash; 3 Phase <span id="threshBadge" class="badge b-off" style="font-weight:400">--</span></div>
       <table class="ph">
         <thead><tr><th>Phase</th><th>Volts</th><th>Amps</th><th>Hz</th></tr></thead>
         <tbody id="phBody"><tr><td colspan="4" style="text-align:left;color:var(--tx2)">Reading&hellip;</td></tr></tbody>
@@ -101,6 +101,8 @@ static const char PAGE_HTML[] PROGMEM = R"HTML(<!DOCTYPE html>
           <button class="btn-s btn-d" id="btnFmStopAll" style="width:100%">Stop all</button>
         </div>
       </div>
+      <div class="hint" style="margin-top:6px">Grey = off &middot; amber border = selected, not running &middot; green = running or open.</div>
+      <div id="fmBoreNote" class="hint" style="display:none">Bore routing valves aren't designated yet &mdash; the diagram shows the bore feeding the farm trunk directly. Set them under Zones &rarr; Manage zones.</div>
       <div id="chkZonesSummary" class="hint" style="margin-top:8px">Open the Zones tab to manage or add zones.</div>
     </div>
    </div>

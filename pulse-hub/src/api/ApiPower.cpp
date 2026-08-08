@@ -1,5 +1,6 @@
 #include "ApiCommon.h"
 #include "ADE7758.h"
+#include "MotorProtection.h"   // protConfig() - voltage thresholds for the UI's out-of-range indicator
 
 #include <ArduinoJson.h>
 
@@ -15,6 +16,10 @@ static void getPower() {
     doc["imbalance"]  = adeCurrentImbalance();
     doc["max_amps"]   = adeMaxAmps();
     doc["age_s"]      = r.lastUpdateMs ? (millis() - r.lastUpdateMs) / 1000UL : 0;
+    // Same thresholds Protection enforces - the UI marks a phase out-of-range
+    // using these, not a hardcoded copy that could drift from the real ones.
+    doc["v_low"]      = protConfig().voltLow;
+    doc["v_high"]     = protConfig().voltHigh;
 
     JsonArray ph = doc.createNestedArray("phases");
     // R/Y/B (Red/Yellow/Blue) is the standard Indian 3-phase colour convention
